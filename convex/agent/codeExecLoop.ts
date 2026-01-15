@@ -110,7 +110,7 @@ async function callCloudLLM(
     body: JSON.stringify({
       path: "services.OpenRouter.internal.chatCompletion",
       args: {
-        model: options.model || "google/gemini-2.5-flash-preview-05-20",
+        model: options.model || "google/gemini-3-flash-preview",
         messages,
         // NO 'tools' property - this is intentional!
         maxTokens: options.maxTokens || 4096,
