@@ -10,6 +10,81 @@ import { z } from "zod";
 import type { ActionCtx } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 
+// Module-level gateway config (set by agent/index.ts)
+let gatewayConfig: { convexUrl: string; jwt: string; cardId?: string } | null = null;
+
+/**
+ * Set the gateway config for artifact tools.
+ * Called by the agent when starting a thread.
+ */
+export function setArtifactGatewayConfig(config: { convexUrl: string; jwt: string; cardId?: string }) {
+  gatewayConfig = config;
+}
+
+/**
+ * Save artifact to cloud via gateway.
+ */
+async function saveToCloud(artifact: {
+  name: string;
+  type: string;
+  content: string;
+  cardId?: string;
+}): Promise<{ success: boolean; id?: string; error?: string }> {
+  const convexUrl = gatewayConfig?.convexUrl || process.env.CONVEX_URL;
+  const jwt = gatewayConfig?.jwt || process.env.SANDBOX_JWT;
+  const cardId = artifact.cardId || gatewayConfig?.cardId || process.env.CARD_ID;
+
+  if (!convexUrl || !jwt) {
+    console.log("[artifacts] Gateway not configured, saving locally only");
+    return { success: false, error: "Gateway not configured" };
+  }
+
+  if (!cardId) {
+    console.log("[artifacts] No cardId available, saving locally only");
+    return { success: false, error: "No cardId available" };
+  }
+
+  try {
+    const response = await fetch(`${convexUrl}/agent/call`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${jwt}`,
+      },
+      body: JSON.stringify({
+        path: "features.kanban.artifacts.saveArtifactWithBackup",
+        type: "action",
+        args: {
+          cardId,
+          artifact: {
+            name: artifact.name,
+            type: artifact.type,
+            content: artifact.content,
+          },
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error(`[artifacts] Cloud save failed: ${error}`);
+      return { success: false, error };
+    }
+
+    const result = await response.json();
+    if (!result.ok) {
+      console.error(`[artifacts] Cloud save error: ${result.error}`);
+      return { success: false, error: result.error };
+    }
+
+    console.log(`[artifacts] Saved to cloud: ${artifact.name}`);
+    return { success: true, id: result.data };
+  } catch (error) {
+    console.error(`[artifacts] Cloud save exception: ${error}`);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 /**
  * Create artifact tools bound to a Convex action context.
  */
@@ -17,12 +92,12 @@ export function createArtifactTools(ctx: ActionCtx) {
   return {
     artifact_save: tool({
       description:
-        "Save an important output as an artifact. Artifacts persist after the session.",
+        "Save an important output as an artifact. Artifacts persist after the session and are synced to cloud.",
       parameters: z.object({
-        name: z.string().describe("Name for the artifact"),
+        name: z.string().describe("Name for the artifact (e.g. 'Important Info.md')"),
         content: z.string().optional().describe("Content to save (for text artifacts)"),
         path: z.string().optional().describe("Path to file to save as artifact"),
-        type: z.string().default("text/plain").describe("MIME type of the artifact"),
+        type: z.string().default("text/markdown").describe("MIME type of the artifact"),
         metadata: z.record(z.any()).optional(),
       }),
       execute: async (args) => {
@@ -55,8 +130,8 @@ export function createArtifactTools(ctx: ActionCtx) {
 
         size = size || content.length;
 
-        // Save to database
-        const id = await ctx.runMutation(api.state.artifacts.save, {
+        // Save to local sandbox database
+        const localId = await ctx.runMutation(api.state.artifacts.save, {
           name: args.name,
           type: args.type,
           content,
@@ -65,18 +140,20 @@ export function createArtifactTools(ctx: ActionCtx) {
           metadata: args.metadata,
         });
 
-        // Queue for sync to cloud
-        await ctx.runMutation(api.planning.sync.queueSync, {
-          type: "artifact",
-          itemId: id,
+        // Sync to cloud immediately (don't just queue)
+        const cloudResult = await saveToCloud({
+          name: args.name,
+          type: args.type,
+          content,
         });
 
         return {
           success: true,
-          id,
+          id: cloudResult.id || localId,
           name: args.name,
           size,
-          message: `Saved artifact: ${args.name}`,
+          syncedToCloud: cloudResult.success,
+          message: `Saved artifact: ${args.name}${cloudResult.success ? " (synced to cloud)" : " (local only)"}`,
         };
       },
     }),

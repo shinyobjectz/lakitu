@@ -12,6 +12,7 @@ import { createBashTool, bashTool } from "./bash";
 import { createBeadsTools, beadsTools } from "./beads";
 import { createArtifactTools, artifactTools } from "./artifacts";
 import { createWebTools, webTools } from "./web";
+import { createPdfTools, pdfTools } from "./pdf";
 import { createLspTools } from "./lsp";
 import { createBrowserTools } from "./browser";
 import { createSubagentTools } from "./subagent";
@@ -22,6 +23,7 @@ export { createBashTool } from "./bash";
 export { createBeadsTools } from "./beads";
 export { createArtifactTools } from "./artifacts";
 export { createWebTools } from "./web";
+export { createPdfTools } from "./pdf";
 export { createLspTools } from "./lsp";
 export { createBrowserTools } from "./browser";
 export { createSubagentTools } from "./subagent";
@@ -32,6 +34,7 @@ export { bashTool } from "./bash";
 export { beadsTools } from "./beads";
 export { artifactTools } from "./artifacts";
 export { webTools } from "./web";
+export { pdfTools } from "./pdf";
 
 /**
  * Create all tools bound to a Convex action context.
@@ -49,6 +52,9 @@ export function createAllTools(ctx: ActionCtx): Record<string, unknown> {
 
     // Web & search
     ...createWebTools(ctx),
+
+    // PDF generation
+    ...createPdfTools(ctx),
 
     // LSP (language intelligence)
     ...createLspTools(ctx),

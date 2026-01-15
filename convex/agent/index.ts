@@ -15,6 +15,8 @@ import { action, internalAction, query, mutation } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 import { v } from "convex/values";
 import { createAllTools } from "../tools";
+import { setGatewayConfig } from "../tools/web";
+import { setArtifactGatewayConfig } from "../tools/artifacts";
 import { SYSTEM_PROMPT } from "../prompts/system";
 
 // Default model - using Gemini Flash for speed/cost
@@ -269,11 +271,19 @@ export const startThread = action({
     const threadId = createThreadId();
 
     // Set gateway config from context if provided
-    const ctxObj = args.context as { gatewayConfig?: GatewayConfig } | undefined;
+    const ctxObj = args.context as { gatewayConfig?: GatewayConfig; cardId?: string } | undefined;
     console.log(`[lakitu agent] Received context: ${JSON.stringify(args.context)}`);
     console.log(`[lakitu agent] gatewayConfig present: ${!!ctxObj?.gatewayConfig}`);
+    console.log(`[lakitu agent] cardId: ${ctxObj?.cardId || 'not provided'}`);
     if (ctxObj?.gatewayConfig) {
       gatewayConfig = ctxObj.gatewayConfig;
+      // Also set gateway config for tools (web, artifacts, etc.)
+      setGatewayConfig(ctxObj.gatewayConfig);
+      // Set artifact gateway config with cardId for cloud sync
+      setArtifactGatewayConfig({
+        ...ctxObj.gatewayConfig,
+        cardId: ctxObj.cardId,
+      });
       console.log(`[lakitu agent] Set gatewayConfig: convexUrl=${gatewayConfig.convexUrl}, jwt length=${gatewayConfig.jwt?.length}`);
     }
 
