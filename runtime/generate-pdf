@@ -14,7 +14,8 @@
  */
 
 import * as fs from "fs";
-import { markdownToDocNode, renderPdf } from "../services/pdf/renderer";
+// Import from lakitu installation (script is copied to /usr/local/bin/)
+import { markdownToDocNode, renderPdf } from "/home/user/lakitu/services/pdf/renderer";
 
 // Cloud gateway config from environment
 const CONVEX_URL = process.env.CONVEX_URL || "http://localhost:3210";
