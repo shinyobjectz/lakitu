@@ -89,18 +89,26 @@ async function saveToCloud(artifact: {
  * Create artifact tools bound to a Convex action context.
  */
 export function createArtifactTools(ctx: ActionCtx) {
-  return {
-    artifact_save: tool({
-      description:
-        "Save an important output as an artifact. Artifacts persist after the session and are synced to cloud.",
+  // Create the save artifact tool once, expose under multiple names for compatibility
+  const saveArtifactTool = tool({
+    description:
+      "Save text/markdown artifacts. For PDF files, use pdf_create instead - this tool cannot create PDFs.",
       parameters: z.object({
         name: z.string().describe("Name for the artifact (e.g. 'Important Info.md')"),
         content: z.string().optional().describe("Content to save (for text artifacts)"),
         path: z.string().optional().describe("Path to file to save as artifact"),
-        type: z.string().default("text/markdown").describe("MIME type of the artifact"),
+        type: z.string().default("text/markdown").describe("Type: text/markdown, json, csv. NOT pdf - use pdf_create for PDFs"),
         metadata: z.record(z.any()).optional(),
       }),
       execute: async (args) => {
+        // Reject PDF type - must use pdf_create tool instead
+        if (args.type === 'pdf' || args.type === 'application/pdf') {
+          return {
+            success: false,
+            error: "Cannot save PDF with this tool. Use the pdf_create tool to generate and save PDFs.",
+          };
+        }
+
         let content = args.content;
         let size = 0;
 
@@ -156,7 +164,12 @@ export function createArtifactTools(ctx: ActionCtx) {
           message: `Saved artifact: ${args.name}${cloudResult.success ? " (synced to cloud)" : " (local only)"}`,
         };
       },
-    }),
+    });
+
+  return {
+    // Expose save artifact under multiple names for compatibility
+    artifact_save: saveArtifactTool,
+    automation_saveArtifact: saveArtifactTool, // Alias for prompt compatibility
 
     artifact_read: tool({
       description: "Read a previously saved artifact",

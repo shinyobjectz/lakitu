@@ -31,7 +31,8 @@
     "openapi-fetch": "^0.10.0",
     "pdfkit": "^0.15.0",
     "playwright": "^1.48.0",
-    "zod": "^3.23.0"
+    "zod": "^3.23.0",
+    "zod-to-json-schema": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

@@ -16,25 +16,31 @@ import { createPdfTools, pdfTools } from "./pdf";
 import { createLspTools } from "./lsp";
 import { createBrowserTools } from "./browser";
 import { createSubagentTools } from "./subagent";
+import { createAutomationTools, automationTools } from "./automation";
+import { createBoardTools, boardTools } from "./board";
 
 // Re-export factory functions
 export { createFileTools } from "./file";
 export { createBashTool } from "./bash";
 export { createBeadsTools } from "./beads";
 export { createArtifactTools } from "./artifacts";
+export { createAutomationTools } from "./automation";
 export { createWebTools } from "./web";
 export { createPdfTools } from "./pdf";
 export { createLspTools } from "./lsp";
 export { createBrowserTools } from "./browser";
 export { createSubagentTools } from "./subagent";
+export { createBoardTools } from "./board";
 
 // Re-export legacy definitions
 export { fileTools } from "./file";
 export { bashTool } from "./bash";
 export { beadsTools } from "./beads";
 export { artifactTools } from "./artifacts";
+export { automationTools } from "./automation";
 export { webTools } from "./web";
 export { pdfTools } from "./pdf";
+export { boardTools } from "./board";
 
 /**
  * Create all tools bound to a Convex action context.
@@ -50,6 +56,9 @@ export function createAllTools(ctx: ActionCtx): Record<string, unknown> {
     ...createBeadsTools(ctx),
     ...createArtifactTools(ctx),
 
+    // Automation (cloud-connected artifact management)
+    ...createAutomationTools(ctx),
+
     // Web & search
     ...createWebTools(ctx),
 
@@ -64,6 +73,9 @@ export function createAllTools(ctx: ActionCtx): Record<string, unknown> {
 
     // Subagent orchestration
     ...createSubagentTools(ctx),
+
+    // Board management (create & run workflows)
+    ...createBoardTools(ctx),
   };
 }
 
@@ -91,5 +103,7 @@ export const allToolDefinitions = {
   bash: bashTool,
   ...beadsTools,
   ...artifactTools,
+  ...automationTools,
   ...webTools,
+  ...boardTools,
 };

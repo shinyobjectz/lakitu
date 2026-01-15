@@ -17,10 +17,20 @@ import { v } from "convex/values";
 import { createAllTools } from "../tools";
 import { setGatewayConfig } from "../tools/web";
 import { setArtifactGatewayConfig } from "../tools/artifacts";
+import { setAutomationGatewayConfig } from "../tools/automation";
+import { setPdfGatewayConfig } from "../tools/pdf";
+import { setBoardGatewayConfig } from "../tools/board";
 import { SYSTEM_PROMPT } from "../prompts/system";
+import type { ChainOfThoughtStep, StepStatus } from "../../shared/chain-of-thought";
+import { createStepId, getStepTypeForTool } from "../../shared/chain-of-thought";
+// Note: Zod 4 has native toJSONSchema() - don't need zod-to-json-schema
 
-// Default model - using Gemini Flash for speed/cost
-const DEFAULT_MODEL = "google/gemini-2.0-flash-001";
+// Model priority: Gemini 3 Flash Preview (fast, reliable tool calling)
+const DEFAULT_MODEL = "google/gemini-3-flash-preview";
+const FALLBACK_MODELS = [
+  "anthropic/claude-haiku-4.5",
+  "mistral/mistral-small-2501",
+];
 
 // ============================================
 // Cloud LLM Gateway
@@ -65,6 +75,104 @@ interface GatewayConfig {
 // Module-level gateway config (set by startThread/continueThread)
 let gatewayConfig: GatewayConfig | null = null;
 
+// Module-level chain-of-thought steps for real-time UI (in-memory per sandbox session)
+const chainOfThoughtSteps: Map<string, ChainOfThoughtStep[]> = new Map();
+
+/** Emit a structured chain-of-thought step */
+function emitStep(threadId: string, step: Omit<ChainOfThoughtStep, "id" | "timestamp">) {
+  if (!chainOfThoughtSteps.has(threadId)) {
+    chainOfThoughtSteps.set(threadId, []);
+  }
+  const fullStep = {
+    id: createStepId(),
+    timestamp: Date.now(),
+    ...step,
+  } as ChainOfThoughtStep;
+  chainOfThoughtSteps.get(threadId)!.push(fullStep);
+  return fullStep.id;
+}
+
+/** Update an existing step's status */
+function updateStepStatus(threadId: string, stepId: string, status: StepStatus) {
+  const steps = chainOfThoughtSteps.get(threadId);
+  if (steps) {
+    const step = steps.find(s => s.id === stepId);
+    if (step) step.status = status;
+  }
+}
+
+/** Create a rich step from tool call and result */
+function createToolStep(
+  toolName: string,
+  args: Record<string, unknown>,
+  result: unknown,
+  status: StepStatus
+): Omit<ChainOfThoughtStep, "id" | "timestamp"> {
+  const stepType = getStepTypeForTool(toolName);
+  
+  switch (stepType) {
+    case "search": {
+      // Extract URLs from search results
+      const res = result as any;
+      const urls: Array<{ url: string; title?: string }> = [];
+      if (res?.results) {
+        for (const r of res.results.slice(0, 5)) {
+          if (r.url) urls.push({ url: r.url, title: r.title });
+        }
+      }
+      return {
+        type: "search",
+        status,
+        label: `Searching for ${(args as any).query || (args as any).username || "information"}`,
+        results: urls.length > 0 ? urls : undefined,
+      };
+    }
+    
+    case "browser": {
+      const action = toolName.replace("browser_", "") as any;
+      return {
+        type: "browser",
+        status,
+        action: action === "open" ? "navigate" : action,
+        label: toolName === "browser_open" 
+          ? `Navigating to ${(args as any).url}`
+          : toolName === "browser_screenshot"
+          ? "Taking screenshot"
+          : `Browser ${action}`,
+        url: (args as any).url,
+        screenshot: toolName === "browser_screenshot" ? (result as any)?.screenshot : undefined,
+      };
+    }
+    
+    case "file": {
+      const operation = toolName.includes("read") ? "read" 
+        : toolName.includes("edit") ? "edit"
+        : toolName.includes("pdf") ? "save"
+        : "write";
+      const path = (args as any).path || (args as any).filename || "file";
+      return {
+        type: "file",
+        status,
+        operation,
+        path,
+        label: operation === "read" ? `Reading ${path}`
+          : operation === "edit" ? `Editing ${path}`
+          : `Saving ${path}`,
+      };
+    }
+    
+    default:
+      return {
+        type: "tool",
+        status,
+        toolName,
+        label: `Running ${toolName}`,
+        input: args,
+        output: result,
+      };
+  }
+}
+
 /**
  * Call the cloud Convex gateway for LLM completions.
  * This protects API keys by routing through the main cloud.
@@ -99,6 +207,8 @@ async function callCloudLLM(
     },
   }));
 
+  // No provider preference - let OpenRouter choose fastest
+
   const response = await fetch(`${convexUrl}/agent/call`, {
     method: "POST",
     headers: {
@@ -113,7 +223,6 @@ async function callCloudLLM(
         tools: openAITools,
         maxTokens: options.maxTokens || 4096,
         temperature: options.temperature,
-        speedy: false,
       },
     }),
   });
@@ -132,12 +241,24 @@ async function callCloudLLM(
   const choice = data.choices?.[0];
 
   // Extract tool calls if present
-  const toolCalls = choice?.message?.tool_calls?.map((tc: any) => ({
-    toolName: tc.function?.name || tc.name,
-    args: typeof tc.function?.arguments === "string"
-      ? JSON.parse(tc.function.arguments)
-      : tc.function?.arguments || tc.arguments || {},
-  }));
+  const toolCalls = choice?.message?.tool_calls?.map((tc: any) => {
+    let args = {};
+    const rawArgs = tc.function?.arguments || tc.arguments;
+    if (typeof rawArgs === "string" && rawArgs.length > 0) {
+      try {
+        args = JSON.parse(rawArgs);
+      } catch (e) {
+        console.error(`[lakitu] Failed to parse tool args for ${tc.function?.name}: ${rawArgs}`);
+        args = {};
+      }
+    } else if (typeof rawArgs === "object" && rawArgs !== null) {
+      args = rawArgs;
+    }
+    return {
+      toolName: tc.function?.name || tc.name,
+      args,
+    };
+  });
 
   return {
     text: choice?.message?.content || "",
@@ -180,15 +301,50 @@ async function runAgentLoop(
   ctx: any,
   systemPrompt: string,
   userPrompt: string,
-  maxSteps: number = 10
+  maxSteps: number = 10,
+  threadId?: string
 ): Promise<{ text: string; toolCalls: ToolCall[] }> {
-  // Build tool definitions for the LLM
+  const tid = threadId || `loop_${Date.now()}`;
+
+  // Build tool definitions for the LLM (convert Zod schemas to JSON schemas)
   const tools = createAllTools(ctx);
-  const toolDefs = Object.entries(tools).map(([name, tool]) => ({
-    name,
-    description: (tool as any).description || `Tool: ${name}`,
-    parameters: (tool as any).parameters || { type: "object", properties: {} },
-  }));
+  console.log(`[lakitu] Available tools: ${Object.keys(tools).join(', ')}`);
+
+  const toolDefs = Object.entries(tools).map(([name, tool]) => {
+    const t = tool as any;
+    let parameters: Record<string, any> = { type: "object", properties: {} };
+
+    // AI SDK tools have Zod schemas in .parameters - convert to JSON schema
+    // Zod 4 has native toJSONSchema() method
+    if (t.parameters && typeof t.parameters.toJSONSchema === "function") {
+      // Use Zod's native JSON schema conversion
+      const jsonSchema = t.parameters.toJSONSchema();
+      // Remove $schema metadata that OpenAI doesn't want
+      const { $schema, ...cleanSchema } = jsonSchema;
+      parameters = cleanSchema;
+    } else if (t.parameters && typeof t.parameters.parse === "function") {
+      // Older Zod without toJSONSchema - try to extract basic shape
+      console.log(`[lakitu] WARNING: Tool ${name} has Zod schema without toJSONSchema`);
+      parameters = { type: "object", properties: {} };
+    } else if (t.parameters && typeof t.parameters === "object") {
+      // Already a JSON schema object
+      parameters = t.parameters;
+    }
+
+    return {
+      name,
+      description: t.description || `Tool: ${name}`,
+      parameters,
+    };
+  });
+
+  // Log pdf_create tool def specifically
+  const pdfTool = toolDefs.find(t => t.name === 'pdf_create');
+  if (pdfTool) {
+    console.log(`[lakitu] pdf_create tool def: ${JSON.stringify(pdfTool)}`);
+  } else {
+    console.log(`[lakitu] WARNING: pdf_create tool NOT FOUND in tool definitions!`);
+  }
 
   const messages: LLMMessage[] = [
     { role: "system", content: systemPrompt },
@@ -198,38 +354,78 @@ async function runAgentLoop(
   const allToolCalls: ToolCall[] = [];
   let finalText = "";
 
+  // Emit initial thinking step
+  emitStep(tid, { type: "thinking", status: "complete", label: "Processing request..." });
+
   for (let step = 0; step < maxSteps; step++) {
+    const thinkingId = emitStep(tid, { 
+      type: "thinking", 
+      status: "active", 
+      label: `Step ${step + 1}: Analyzing...` 
+    });
+
     // Call LLM via cloud gateway
     const response = await callCloudLLM(messages, {
       tools: toolDefs.length > 0 ? toolDefs : undefined,
     });
+    
+    updateStepStatus(tid, thinkingId, "complete");
 
     // If no tool calls, we're done
     if (!response.toolCalls || response.toolCalls.length === 0) {
       finalText = response.text;
+      if (finalText) {
+        emitStep(tid, { type: "text", status: "complete", label: finalText.slice(0, 200) });
+      }
       break;
     }
 
     // Execute tool calls
+    console.log(`[lakitu] LLM requested ${response.toolCalls.length} tool calls: ${response.toolCalls.map(t => t.toolName).join(', ')}`);
+
     const toolResults: string[] = [];
     for (const tc of response.toolCalls) {
       allToolCalls.push(tc);
+      console.log(`[lakitu] Executing tool: ${tc.toolName} with args: ${JSON.stringify(tc.args).slice(0, 200)}`);
+
+      // Emit tool call as active step
+      const toolStepId = emitStep(tid, createToolStep(tc.toolName, tc.args, null, "active"));
 
       try {
         const tool = tools[tc.toolName];
         if (!tool) {
-          toolResults.push(`Error: Unknown tool "${tc.toolName}"`);
+          const err = `Error: Unknown tool "${tc.toolName}"`;
+          console.log(`[lakitu] Tool not found: ${tc.toolName}`);
+          toolResults.push(err);
+          updateStepStatus(tid, toolStepId, "error");
           continue;
         }
 
         // Execute the tool
+        console.log(`[lakitu] Calling ${tc.toolName}.execute()...`);
         const result = await (tool as any).execute(tc.args, { toolCallId: `${step}-${tc.toolName}` });
-        toolResults.push(
-          typeof result === "string" ? result : JSON.stringify(result)
-        );
+        console.log(`[lakitu] ${tc.toolName} returned: ${JSON.stringify(result).slice(0, 200)}`);
+        const resultStr = typeof result === "string" ? result : JSON.stringify(result);
+        toolResults.push(resultStr);
+
+        // Update the step with result and mark complete
+        const steps = chainOfThoughtSteps.get(tid);
+        if (steps) {
+          const idx = steps.findIndex(s => s.id === toolStepId);
+          if (idx >= 0) {
+            // Replace with enriched step containing result data
+            steps[idx] = {
+              id: toolStepId,
+              timestamp: steps[idx].timestamp,
+              ...createToolStep(tc.toolName, tc.args, result, "complete"),
+            } as ChainOfThoughtStep;
+          }
+        }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        toolResults.push(`Error executing ${tc.toolName}: ${msg}`);
+        const err = `Error executing ${tc.toolName}: ${msg}`;
+        toolResults.push(err);
+        updateStepStatus(tid, toolStepId, "error");
       }
     }
 
@@ -248,6 +444,9 @@ async function runAgentLoop(
     // Check if LLM indicated completion
     if (response.finishReason === "stop") {
       finalText = response.text;
+      if (finalText) {
+        emitStep(tid, { type: "text", status: "complete", label: finalText.slice(0, 200) });
+      }
       break;
     }
   }
@@ -284,6 +483,20 @@ export const startThread = action({
         ...ctxObj.gatewayConfig,
         cardId: ctxObj.cardId,
       });
+      // Set automation gateway config with cardId for cross-stage artifact access
+      setAutomationGatewayConfig({
+        ...ctxObj.gatewayConfig,
+        cardId: ctxObj.cardId,
+      });
+      // Set PDF gateway config for auto-artifact save
+      setPdfGatewayConfig({
+        ...ctxObj.gatewayConfig,
+        cardId: ctxObj.cardId,
+      });
+      // Set board gateway config for workflow management
+      setBoardGatewayConfig({
+        ...ctxObj.gatewayConfig,
+      });
       console.log(`[lakitu agent] Set gatewayConfig: convexUrl=${gatewayConfig.convexUrl}, jwt length=${gatewayConfig.jwt?.length}`);
     }
 
@@ -297,8 +510,8 @@ export const startThread = action({
       expectedOutcome: "Agent will process the prompt and produce results",
     });
 
-    // Run the agent loop
-    const result = await runAgentLoop(ctx, SYSTEM_PROMPT, args.prompt);
+    // Run the agent loop with threadId for streaming
+    const result = await runAgentLoop(ctx, SYSTEM_PROMPT, args.prompt, 10, threadId);
 
     return {
       threadId,
@@ -426,7 +639,17 @@ export const getThreadMessages = query({
 
 export const getStreamDeltas = query({
   args: { threadId: v.string(), since: v.optional(v.number()) },
-  handler: async (_ctx, _args): Promise<Array<{ delta: string; timestamp: number }>> => {
-    return [];
+  handler: async (_ctx, args): Promise<ChainOfThoughtStep[]> => {
+    const steps = chainOfThoughtSteps.get(args.threadId) || [];
+    const since = args.since || 0;
+    return steps.filter((s) => s.timestamp > since);
+  },
+});
+
+/** Get all chain-of-thought steps for a thread */
+export const getChainOfThoughtSteps = query({
+  args: { threadId: v.string() },
+  handler: async (_ctx, args): Promise<ChainOfThoughtStep[]> => {
+    return chainOfThoughtSteps.get(args.threadId) || [];
   },
 });
