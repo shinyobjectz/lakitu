@@ -15,7 +15,7 @@
  */
 
 import { internal } from "../_generated/api";
-import { wrapCodeForExecution } from "../utils/codeExecHelpers";
+import { wrapCodeForExecution, extractCodeBlocks } from "../utils/codeExecHelpers";
 import type { ChainOfThoughtStep, StepStatus } from "../../shared/chain-of-thought";
 import { createStepId } from "../../shared/chain-of-thought";
 
@@ -77,41 +77,50 @@ export function getSteps(threadId: string): ChainOfThoughtStep[] {
 }
 
 // ============================================================================
-// Cloud LLM Gateway (Single execute_code tool)
+// Cloud LLM Gateway (JSON Schema Structured Output)
 // ============================================================================
 
-interface ToolCall {
-  toolName: string;
-  args: Record<string, unknown>;
+interface AgentAction {
+  thinking: string;
+  code?: string;
+  response?: string;
 }
 
 interface LLMResponse {
   text: string;
-  toolCalls?: ToolCall[];
+  action?: AgentAction;
   finishReason?: string;
 }
 
-// Single tool for code execution
-const EXECUTE_CODE_TOOL = {
-  type: "function" as const,
-  function: {
-    name: "execute_code",
-    description: "Execute TypeScript code that imports from KSAs (./ksa/*). Use this to perform actions like saving artifacts, searching the web, generating PDFs, etc.",
-    parameters: {
-      type: "object",
-      properties: {
-        code: {
-          type: "string",
-          description: "TypeScript code to execute. Import from ./ksa/* for capabilities.",
-        },
+// JSON Schema for structured output - forces model to return valid JSON
+// This is MORE RELIABLE than tool_choice which some providers ignore
+const AGENT_ACTION_SCHEMA = {
+  name: "AgentAction",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: {
+      thinking: {
+        type: "string",
+        description: "Your reasoning about what to do next. Always explain your thought process.",
       },
-      required: ["code"],
+      code: {
+        type: "string",
+        description: "TypeScript code to execute. Import from ./ksa/* for capabilities (web search, file ops, PDF generation, etc.). Leave empty string if no code needed.",
+      },
+      response: {
+        type: "string",
+        description: "Final response to the user. Only provide a non-empty value when the task is FULLY COMPLETE and no more code needs to run. Leave empty string otherwise.",
+      },
     },
+    required: ["thinking", "code", "response"],
+    additionalProperties: false,
   },
 };
 
 /**
- * Call the cloud LLM gateway with single execute_code tool.
+ * Call the cloud LLM gateway with JSON schema structured output.
+ * Uses response_format instead of tool calling for reliability.
  */
 async function callCloudLLM(
   messages: LLMMessage[],
@@ -139,7 +148,10 @@ async function callCloudLLM(
       args: {
         model: options.model || "google/gemini-3-flash-preview",
         messages,
-        tools: [EXECUTE_CODE_TOOL],
+        responseFormat: {
+          type: "json_schema",
+          json_schema: AGENT_ACTION_SCHEMA,
+        },
         maxTokens: options.maxTokens || 4096,
         temperature: options.temperature,
       },
@@ -156,29 +168,36 @@ async function callCloudLLM(
   }
 
   const choice = result.data.choices?.[0];
+  const content = choice?.message?.content || "";
 
-  // Extract tool calls if present
-  const toolCalls = choice?.message?.tool_calls?.map((tc: any) => {
-    let args = {};
-    const rawArgs = tc.function?.arguments || tc.arguments;
-    if (typeof rawArgs === "string" && rawArgs.length > 0) {
-      try {
-        args = JSON.parse(rawArgs);
-      } catch (e) {
-        args = { code: rawArgs }; // Treat as raw code if JSON parse fails
+  // Debug logging
+  console.log(`[callCloudLLM] finish_reason: ${choice?.finish_reason}`);
+  console.log(`[callCloudLLM] content preview: ${content.slice(0, 300)}`);
+
+  // Parse JSON structured output
+  let action: AgentAction | undefined;
+  if (content) {
+    try {
+      action = JSON.parse(content) as AgentAction;
+      console.log(`[callCloudLLM] Parsed action - thinking: ${action.thinking?.slice(0, 100)}, hasCode: ${!!action.code}, hasResponse: ${!!action.response}`);
+    } catch (e) {
+      console.error(`[callCloudLLM] Failed to parse JSON: ${e}`);
+      // If JSON parse fails, try to extract from markdown code blocks
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) {
+        try {
+          action = JSON.parse(jsonMatch[1].trim()) as AgentAction;
+          console.log(`[callCloudLLM] Extracted JSON from code block`);
+        } catch {
+          console.error(`[callCloudLLM] Could not parse JSON from code block either`);
+        }
       }
-    } else if (typeof rawArgs === "object" && rawArgs !== null) {
-      args = rawArgs;
     }
-    return {
-      toolName: tc.function?.name || tc.name,
-      args,
-    };
-  });
+  }
 
   return {
-    text: choice?.message?.content || "",
-    toolCalls: toolCalls?.length > 0 ? toolCalls : undefined,
+    text: content,
+    action,
     finishReason: choice?.finish_reason,
   };
 }
@@ -204,10 +223,19 @@ export async function runCodeExecLoop(
   options: {
     maxSteps?: number;
     threadId?: string;
+    cardId?: string;
+    model?: string;
   } = {}
 ): Promise<CodeExecResult> {
+  // MARKER: Version 2026-01-15-v3 - code execution enforcement with retry limit
+  console.log("🔥🔥🔥 [codeExecLoop] VERSION: 2026-01-15-v3 WITH CODE ENFORCEMENT 🔥🔥🔥");
+
   const maxSteps = options.maxSteps || 10;
   const threadId = options.threadId || `codeexec_${Date.now()}`;
+  const cardId = options.cardId;
+  const model = options.model;
+  let codeEnforcementRetries = 0;
+  const MAX_CODE_ENFORCEMENT_RETRIES = 3;
 
   const messages: LLMMessage[] = [
     { role: "system", content: systemPrompt },
@@ -230,46 +258,122 @@ export async function runCodeExecLoop(
       label: `Step ${step + 1}: Thinking...`,
     });
 
-    // Call LLM with execute_code tool
-    const response = await callCloudLLM(messages, gatewayConfig);
+    // Call LLM - uses JSON schema structured output
+    const response = await callCloudLLM(messages, gatewayConfig, { model });
     updateStepStatus(threadId, thinkingId, "complete");
 
-    // If no tool calls, this is the final response
-    if (!response.toolCalls || response.toolCalls.length === 0) {
-      finalText = response.text;
-      if (finalText) {
+    // Get the structured action from response
+    let action = response.action;
+
+    // Fallback: if structured output failed, try to extract code blocks
+    if (!action) {
+      console.error("[codeExecLoop] ERROR: No structured action returned!");
+      console.error("[codeExecLoop] Response text:", response.text);
+
+      const codeBlocks = extractCodeBlocks(response.text);
+      if (codeBlocks.length > 0) {
+        console.log(`[codeExecLoop] Fallback: Found ${codeBlocks.length} code blocks`);
+        action = {
+          thinking: "Extracted from markdown",
+          code: codeBlocks.join("\n\n"),
+          response: "",
+        };
+      } else {
+        // No action and no code - treat text as final response
+        finalText = response.text || "Agent completed without response.";
         emitStep(threadId, {
           type: "text",
           status: "complete",
           label: finalText.slice(0, 200),
         });
+        break;
       }
+    }
+
+    // Log the agent's thinking
+    if (action.thinking) {
+      emitStep(threadId, {
+        type: "thinking",
+        status: "complete",
+        label: action.thinking.slice(0, 200),
+      });
+      console.log(`[codeExecLoop] Thinking: ${action.thinking}`);
+    }
+
+    // If agent provided a final response (non-empty) and no code, we're done
+    const hasCode = action.code && action.code.trim().length > 0;
+    const hasResponse = action.response && action.response.trim().length > 0;
+
+    if (hasResponse && !hasCode) {
+      // CRITICAL: Reject responses if no code has been executed yet
+      // This prevents the agent from hallucinating completion without actually executing
+      if (allExecutions.length === 0) {
+        codeEnforcementRetries++;
+        console.warn(`[codeExecLoop] Agent tried to respond without code - retry ${codeEnforcementRetries}/${MAX_CODE_ENFORCEMENT_RETRIES} (step ${step})`);
+
+        if (codeEnforcementRetries >= MAX_CODE_ENFORCEMENT_RETRIES) {
+          console.error("[codeExecLoop] Agent failed to provide code after max retries - failing");
+          emitStep(threadId, {
+            type: "thinking",
+            status: "error",
+            label: "Agent failed to execute code after multiple attempts",
+          });
+          finalText = `ERROR: Agent failed to execute code. Response was: ${action.response}`;
+          break;
+        }
+
+        emitStep(threadId, {
+          type: "thinking",
+          status: "error",
+          label: `Retry ${codeEnforcementRetries}: Agent must execute code`,
+        });
+
+        // Ask the agent to try again with code
+        messages.push({
+          role: "assistant",
+          content: `Thinking: ${action.thinking || "..."}\n\nResponse: ${action.response}`,
+        });
+        messages.push({
+          role: "user",
+          content: `ERROR: You cannot provide a response without executing code first. You MUST provide actual TypeScript code in the "code" field. Do not describe what you would do - actually write and execute code using import statements like: import { search } from './ksa/web'. Try again with code.`,
+        });
+        continue; // Go to next iteration
+      }
+
+      // After code has been executed, accept the response
+      finalText = action.response!;
+      emitStep(threadId, {
+        type: "text",
+        status: "complete",
+        label: finalText.slice(0, 200),
+      });
       break;
     }
 
-    // Execute each tool call (should be execute_code)
-    const toolResults: string[] = [];
-
-    for (const tc of response.toolCalls) {
-      if (tc.toolName !== "execute_code") {
-        toolResults.push(`Unknown tool: ${tc.toolName}`);
-        continue;
-      }
-
-      const code = wrapCodeForExecution((tc.args as any).code || "");
+    // If agent provided code, execute it
+    if (hasCode) {
+      const code = wrapCodeForExecution(action.code!);
 
       const execId = emitStep(threadId, {
         type: "tool",
         status: "active",
-        toolName: "execute_code",
+        toolName: "code_execution",
         label: "Executing code...",
         input: { code: code.slice(0, 500) },
       });
 
+      let execResult: string;
       try {
-        const result = await ctx.runAction(internal.actions.codeExec.execute, {
+        const result = await ctx.runAction(internal.nodeActions.codeExec.execute, {
           code,
           timeoutMs: 60_000,
+          env: {
+            // KSAs use both CONVEX_URL and GATEWAY_URL - provide both for compatibility
+            CONVEX_URL: gatewayConfig.convexUrl,
+            GATEWAY_URL: gatewayConfig.convexUrl,
+            SANDBOX_JWT: gatewayConfig.jwt,
+            ...(cardId && { CARD_ID: cardId }),
+          },
         });
 
         allExecutions.push({
@@ -279,15 +383,15 @@ export async function runCodeExecLoop(
         });
 
         if (result.success) {
-          toolResults.push(`[execute_code result]\n${result.output}`);
+          execResult = `[Execution successful]\n${result.output}`;
           updateStepStatus(threadId, execId, "complete");
         } else {
-          toolResults.push(`[execute_code error]\n${result.error}\n${result.output}`);
+          execResult = `[Execution failed]\nError: ${result.error}\nOutput: ${result.output}`;
           updateStepStatus(threadId, execId, "error");
         }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        toolResults.push(`[execute_code error]\n${msg}`);
+        execResult = `[Execution error]\n${msg}`;
         allExecutions.push({
           code,
           output: msg,
@@ -295,19 +399,24 @@ export async function runCodeExecLoop(
         });
         updateStepStatus(threadId, execId, "error");
       }
+
+      // Add assistant's action to messages
+      messages.push({
+        role: "assistant",
+        content: `Thinking: ${action.thinking || "..."}\n\nExecuting code:\n\`\`\`typescript\n${action.code}\n\`\`\``,
+      });
+
+      // Add execution result
+      messages.push({
+        role: "user",
+        content: `${execResult}\n\nContinue with the task. Respond with JSON containing "thinking", "code", and "response" fields.`,
+      });
+    } else {
+      // No code and no response - shouldn't happen but handle gracefully
+      console.warn("[codeExecLoop] Action has neither code nor response");
+      finalText = action.thinking || "Task completed.";
+      break;
     }
-
-    // Add assistant message
-    messages.push({
-      role: "assistant",
-      content: response.text || `Called execute_code`,
-    });
-
-    // Add tool results as user message
-    messages.push({
-      role: "user",
-      content: `${toolResults.join("\n\n")}\n\nContinue with the task. When complete, respond without calling execute_code.`,
-    });
   }
 
   return {

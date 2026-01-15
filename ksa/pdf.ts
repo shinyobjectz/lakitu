@@ -19,6 +19,12 @@ export interface PdfResult {
   error?: string;
 }
 
+export interface GenerateParams {
+  filename: string;
+  content: string;
+  title?: string;
+}
+
 // ============================================================================
 // Functions
 // ============================================================================
@@ -26,44 +32,49 @@ export interface PdfResult {
 /**
  * Generate a PDF from markdown content.
  *
- * @param markdown - Markdown content to convert to PDF
- * @param name - Output filename (without .pdf extension)
- * @param title - Optional document title
+ * @param params - Object with filename, content, and optional title
  * @returns Path to generated PDF
  *
  * @example
- * await generate('# Report\n\nContent here...', 'my-report', 'Quarterly Report');
+ * await generate({
+ *   filename: 'my-report',
+ *   content: '# Report\n\nContent here...',
+ *   title: 'Quarterly Report'
+ * });
  * // Creates /home/user/artifacts/my-report.pdf
  */
-export async function generate(
-  markdown: string,
-  name: string,
-  title?: string
-): Promise<PdfResult> {
+export async function generate(params: GenerateParams): Promise<PdfResult> {
+  const { filename, content, title } = params;
+
   try {
     // Escape markdown for shell
-    const escaped = markdown.replace(/'/g, "'\\''");
+    const escaped = content.replace(/'/g, "'\\''");
 
     // Build command
     const titleArg = title ? ` "${title}"` : "";
-    const cmd = `echo '${escaped}' | generate-pdf "${name}"${titleArg}`;
+    const cmd = `echo '${escaped}' | generate-pdf "${filename}"${titleArg}`;
+
+    console.log(`[pdf] Generating PDF: ${filename}.pdf`);
 
     await execAsync(cmd, {
       cwd: "/home/user/workspace",
       timeout: 30_000,
     });
 
-    const path = `/home/user/artifacts/${name}.pdf`;
+    const path = `/home/user/artifacts/${filename}.pdf`;
+    console.log(`[pdf] Generated: ${path}`);
 
     return {
       success: true,
       path,
     };
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[pdf] Generation failed: ${msg}`);
     return {
       success: false,
       path: "",
-      error: error instanceof Error ? error.message : String(error),
+      error: msg,
     };
   }
 }

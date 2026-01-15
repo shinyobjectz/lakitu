@@ -25,6 +25,12 @@ export const execute = internalAction({
   args: {
     code: v.string(),
     timeoutMs: v.optional(v.number()),
+    env: v.optional(v.object({
+      CONVEX_URL: v.optional(v.string()),
+      GATEWAY_URL: v.optional(v.string()),
+      SANDBOX_JWT: v.optional(v.string()),
+      CARD_ID: v.optional(v.string()),
+    })),
   },
   handler: async (_ctx, args): Promise<{
     success: boolean;
@@ -49,14 +55,23 @@ export const execute = internalAction({
       // Write code to temp file
       await fs.writeFile(filename, args.code, "utf-8");
 
-      // Execute with bun
-      const { stdout, stderr } = await execAsync(`bun run ${filename}`, {
+      // Execute with bun (use full path since PATH may not be set in Convex process)
+      const bunPath = "/home/user/.bun/bin/bun";
+      const { stdout, stderr } = await execAsync(`${bunPath} run ${filename}`, {
         timeout,
         cwd: "/home/user/workspace",
         env: {
           ...process.env,
+          // Ensure PATH includes bun
+          PATH: "/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin",
+          HOME: "/home/user",
           // Make KSAs available via import path
           NODE_PATH: "/home/user",
+          // Gateway config for KSAs to call cloud services
+          ...(args.env?.CONVEX_URL && { CONVEX_URL: args.env.CONVEX_URL }),
+          ...(args.env?.GATEWAY_URL && { GATEWAY_URL: args.env.GATEWAY_URL }),
+          ...(args.env?.SANDBOX_JWT && { SANDBOX_JWT: args.env.SANDBOX_JWT }),
+          ...(args.env?.CARD_ID && { CARD_ID: args.env.CARD_ID }),
         },
         maxBuffer: MAX_OUTPUT_LENGTH * 2,
       });
