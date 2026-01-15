@@ -102,6 +102,79 @@ await type('input[name="email"]', 'user@example.com');
 const text = await getText();
 \`\`\`
 
+### News KSA (\`./ksa/news\`)
+\`\`\`typescript
+import { search, trending, monitorBrand, analyzeSentiment } from './ksa/news';
+
+// Advanced news search with filters
+const articles = await search({
+  query: 'AI regulation',
+  category: 'politics',
+  sentiment: 'negative',
+  limit: 20
+});
+
+// Get trending news by category
+const tech = await trending('science', 10);
+
+// Monitor brand mentions
+const mentions = await monitorBrand('Apple', { days: 7, sentiment: 'negative' });
+
+// Analyze sentiment distribution
+const sentiment = await analyzeSentiment('climate change', 30);
+\`\`\`
+
+### Social Media KSA (\`./ksa/social\`)
+\`\`\`typescript
+import { tiktokProfile, instagramPosts, twitterProfile, searchSocial } from './ksa/social';
+
+// Get social profiles
+const tiktok = await tiktokProfile('charlidamelio');
+const twitter = await twitterProfile('elonmusk');
+
+// Get recent posts
+const posts = await instagramPosts('instagram', 10);
+
+// Search across platforms
+const results = await searchSocial('AI news', 'twitter', 10);
+\`\`\`
+
+### Companies KSA (\`./ksa/companies\`)
+\`\`\`typescript
+import { enrichDomain, searchCompanies, getTechStack } from './ksa/companies';
+
+// Enrich company by domain
+const company = await enrichDomain('stripe.com');
+console.log(company.name, company.industry, company.employeeRange);
+
+// Search companies
+const saas = await searchCompanies({
+  industry: 'SaaS',
+  employeeMin: 50,
+  employeeMax: 500,
+  country: 'US'
+});
+
+// Get tech stack
+const tech = await getTechStack('notion.so');
+\`\`\`
+
+### Email KSA (\`./ksa/email\`)
+\`\`\`typescript
+import { send, sendText, sendWithAttachment } from './ksa/email';
+
+// Send a simple email
+await sendText('user@example.com', 'Report Ready', 'Your analysis is complete.');
+
+// Send with attachment
+await sendWithAttachment(
+  'user@example.com',
+  'Quarterly Report',
+  'Please find the report attached.',
+  { content: base64Content, filename: 'report.pdf', type: 'application/pdf' }
+);
+\`\`\`
+
 ## Working Directories
 
 - \`/home/user/workspace/\` - Your working directory for code and files

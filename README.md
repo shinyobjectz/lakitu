@@ -1,129 +1,149 @@
 <p align="center">
-  <img src="assets/laki2-banner.jpeg" alt="Laki2 Banner" width="100%">
+  <img src="assets/laki2-banner.jpeg" alt="Lakitu Banner" width="100%">
 </p>
 
-# Laki2
+# Lakitu
 
-> Self-hosted AI agent runtime in an E2B sandbox with local Convex backend.
+> AI agent runtime using **code execution**, not JSON tool calls.
 
-Laki2 is a fully autonomous development environment that runs inside an [E2B](https://e2b.dev) sandbox. It uses a **self-hosted Convex backend** for persistence, real-time sync, and agent orchestration - all contained within the sandbox.
+Lakitu is an autonomous development environment that runs in an [E2B](https://e2b.dev) sandbox. The agent writes TypeScript code that imports from **KSAs** (Knowledge, Skills, and Abilities), which gets executed in the sandbox.
 
-## Features
+## The Code Execution Model
 
-| Feature | Description |
-|---------|-------------|
-| **Local Convex** | Self-hosted Convex backend for persistence & real-time queries |
-| **Code Execution** | Bash, Node.js, Python execution with output capture |
-| **LSP Hosting** | TypeScript, Python, Rust language servers for intelligent editing |
-| **Browser Automation** | Headless browser for web interaction |
-| **Subagents** | Spawn specialized agents for parallel/delegated work |
-| **Beads Planning** | Distributed task tracking with dependency resolution |
-| **Artifact Storage** | Persist outputs that survive session end |
-| **Checkpointing** | Resume long-running tasks across timeout boundaries |
-
-## Quick Start
-
-### Prerequisites
-
-- [Bun](https://bun.sh) (v1.0+)
-- [E2B API Key](https://e2b.dev) 
-- [Convex](https://convex.dev) account (for cloud sync)
-
-### Installation
-
-```bash
-# Clone the repo
-git clone https://github.com/shinyobjectz/laki2.git
-cd laki2
-
-# Install dependencies
-bun install
-
-# Set up environment
-cp .env.example .env
-# Add your E2B_API_KEY and OPENROUTER_API_KEY
+```
+Traditional Agent:          Lakitu Agent:
+┌─────────────────┐         ┌─────────────────┐
+│  LLM Response   │         │  LLM Response   │
+│  {              │         │  ```typescript  │
+│    "tool": "x", │   vs    │  import { x }   │
+│    "args": {}   │         │  await x(...)   │
+│  }              │         │  ```            │
+└────────┬────────┘         └────────┬────────┘
+         │                           │
+    Parse JSON               Execute TypeScript
+    Route to tool            (E2B sandbox)
+         │                           │
+    ┌────▼────┐              ┌───────▼───────┐
+    │ Executor │              │  KSA Modules  │
+    └─────────┘              └───────────────┘
 ```
 
-### Development
+**Why?** Token efficiency (no tool schemas), composability (chain operations in code), debuggability (read exactly what ran).
 
-```bash
-# Start local Convex dev server
-bun dev
+## KSAs (Knowledge, Skills, and Abilities)
 
-# Run tests
-bun test
+KSAs are TypeScript modules the agent imports. They combine:
+- **Knowledge**: JSDoc documentation
+- **Skills**: Executable functions
+- **Abilities**: What the agent can accomplish
 
-# Type check
-bun typecheck
-```
+### Available KSAs
 
-### Building the E2B Template
+| Category | KSA | Functions |
+|----------|-----|-----------|
+| **System** | `file` | `read`, `write`, `edit`, `glob`, `grep`, `ls` |
+| | `browser` | `open`, `screenshot`, `click`, `type`, `getText` |
+| | `beads` | `create`, `update`, `close`, `list`, `getReady` |
+| | `pdf` | `generate` |
+| **Research** | `web` | `search`, `scrape`, `news` |
+| | `news` | `trending`, `monitorBrand`, `analyzeSentiment` |
+| | `social` | `tiktokProfile`, `instagramPosts`, `twitterPosts`, `searchSocial` |
+| **Data** | `companies` | `enrichDomain`, `searchCompanies`, `getTechStack` |
+| **Create** | `email` | `send`, `sendText`, `sendWithAttachment` |
 
-```bash
-# Build and push the custom template (~1 min)
-bun template:custom
+### Example Agent Code
 
-# Build base + custom template (~5 min)
-bun template:build
+```typescript
+import { search, scrape } from './ksa/web';
+import { enrichDomain } from './ksa/companies';
+import { send } from './ksa/email';
+
+// Research a company
+const results = await search('Stripe payments company');
+const content = await scrape(results[0].url);
+
+// Enrich with company data
+const company = await enrichDomain('stripe.com');
+console.log(`${company.name}: ${company.industry}, ${company.employeeRange} employees`);
+
+// Send findings
+await send({
+  to: 'user@example.com',
+  subject: 'Company Research: Stripe',
+  text: `Industry: ${company.industry}\nEmployees: ${company.employeeRange}`
+});
 ```
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              E2B SANDBOX                                     │
-│                                                                              │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │                     CONVEX LOCAL BACKEND                            │    │
-│  │                                                                      │    │
-│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐   │    │
-│  │  │  Threads   │  │  Messages  │  │   Beads    │  │  Artifacts │   │    │
-│  │  └────────────┘  └────────────┘  └────────────┘  └────────────┘   │    │
-│  │                                                                      │    │
-│  │  ┌──────────────────────────────────────────────────────────────┐  │    │
-│  │  │                    WORKSPACE AGENT                            │  │    │
-│  │  │  file_read │ file_write │ bash │ lsp │ browser │ subagent   │  │    │
-│  │  └──────────────────────────────────────────────────────────────┘  │    │
-│  └─────────────────────────────────────────────────────────────────────┘    │
-│                                                                              │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │                       RUNTIME PROCESSES                              │    │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │    │
-│  │  │  TypeScript  │  │    Python    │  │ File Watcher │              │    │
-│  │  │  LSP Server  │  │  LSP Server  │  │   (chokidar) │              │    │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘              │    │
-│  └─────────────────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                              E2B SANDBOX                                 │
+│                                                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                         KSA MODULES                              │    │
+│  │  /home/user/ksa/                                                 │    │
+│  │  ┌──────┐ ┌──────┐ ┌───────┐ ┌─────────┐ ┌───────┐ ┌─────────┐ │    │
+│  │  │ file │ │ web  │ │ news  │ │ social  │ │ email │ │companies│ │    │
+│  │  └──────┘ └──────┘ └───────┘ └─────────┘ └───────┘ └─────────┘ │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                    │                                     │
+│                          Local ops │ Gateway calls                       │
+│                                    ▼                                     │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                      CLOUD GATEWAY                               │    │
+│  │  HTTP → Convex Services (OpenRouter, APITube, ScrapeCreators)   │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  /home/user/workspace/    Working files                          │    │
+│  │  /home/user/artifacts/    Persistent outputs (PDFs, screenshots) │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Directory Structure
 
 ```
-laki2/
-├── convex/                 # Convex backend (runs inside sandbox)
-│   ├── agent/              # Agent orchestration
-│   ├── tools/              # AI SDK tool definitions
-│   ├── actions/            # Node.js implementations
-│   ├── state/              # State management
-│   ├── planning/           # Beads task tracking
-│   ├── context/            # Session & context
+lakitu/
+├── ksa/                    # KSA modules (agent imports these)
+│   ├── _shared/            # Shared utilities
+│   │   └── gateway.ts      # Cloud gateway client
+│   ├── _templates/         # Templates for new KSAs
+│   ├── web.ts              # Web search & scraping
+│   ├── news.ts             # News research & monitoring
+│   ├── social.ts           # Social media scraping
+│   ├── companies.ts        # Company data enrichment
+│   ├── email.ts            # Email sending
+│   ├── file.ts             # File operations
+│   ├── browser.ts          # Browser automation
+│   ├── beads.ts            # Task tracking
+│   ├── pdf.ts              # PDF generation
+│   └── index.ts            # Discovery & exports
+│
+├── convex/                 # Convex backend
+│   ├── agent/              # Agent loop implementation
+│   │   └── codeExecLoop.ts # Code execution loop (no tool schemas)
+│   ├── actions/            # Convex actions
+│   │   └── codeExec.ts     # Code execution runtime
 │   ├── prompts/            # System prompts
-│   └── schema.ts           # Database schema
+│   │   └── codeExec.ts     # KSA documentation for agent
+│   └── tools/              # LEGACY: Being removed
 │
-├── runtime/                # Sandbox runtime processes
-│   ├── entrypoint.ts       # Main startup script
-│   ├── browser/            # Browser automation
-│   ├── lsp/                # LSP server management
-│   └── services/           # Background services
+├── shared/                 # Shared types
+│   └── chain-of-thought.ts # Execution tracing
 │
-├── shared/                 # Shared code (host & sandbox)
-│   ├── types.ts            # TypeScript types
-│   ├── schemas/            # Zod schemas
-│   └── constants.ts        # Paths, limits, defaults
-│
-└── template/               # E2B template building
-    └── build.ts            # Template builder script
+└── runtime/                # CLI commands for bash
 ```
+
+## Adding New KSAs
+
+See `ksa/README.md` for detailed instructions. Quick steps:
+
+1. Copy template from `ksa/_templates/`
+2. Implement functions (use `callGateway()` for external services)
+3. Add to `ksa/index.ts` registry
+4. Document in system prompt (`convex/prompts/codeExec.ts`)
 
 ## Scripts
 
@@ -133,15 +153,14 @@ laki2/
 | `bun deploy` | Deploy to Convex cloud |
 | `bun test` | Run unit tests |
 | `bun typecheck` | TypeScript type check |
-| `bun template:build` | Build full E2B template |
-| `bun template:custom` | Build custom layer only |
 
-## License
+## Related Documentation
 
-MIT
+- `CLAUDE.md` - Instructions for AI agents working on this codebase
+- `ksa/README.md` - KSA documentation and extension guide
+- `convex/prompts/codeExec.ts` - System prompt with KSA examples
 
 ## Links
 
 - [E2B Documentation](https://e2b.dev/docs)
 - [Convex Documentation](https://docs.convex.dev)
-- [Convex Agent SDK](https://docs.convex.dev/agents)

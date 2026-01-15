@@ -16,13 +16,24 @@ KSAs are designed for **code execution** - the agent imports and calls them dire
 
 ## Quick Reference
 
+### System KSAs (Local Operations)
+
+| KSA | Functions | Import |
+|-----|-----------|--------|
+| **file** | `read`, `write`, `edit`, `glob`, `grep`, `ls` | `from './ksa/file'` |
+| **browser** | `open`, `screenshot`, `click`, `type`, `getText`, `getHtml` | `from './ksa/browser'` |
+| **beads** | `create`, `update`, `close`, `list`, `getReady`, `get` | `from './ksa/beads'` |
+| **pdf** | `generate` | `from './ksa/pdf'` |
+
+### Research KSAs (Gateway Operations)
+
 | KSA | Functions | Import |
 |-----|-----------|--------|
 | **web** | `search`, `scrape`, `news` | `from './ksa/web'` |
-| **file** | `read`, `write`, `edit`, `glob`, `grep`, `ls` | `from './ksa/file'` |
-| **pdf** | `generate` | `from './ksa/pdf'` |
-| **beads** | `create`, `update`, `close`, `list`, `getReady`, `get` | `from './ksa/beads'` |
-| **browser** | `open`, `screenshot`, `click`, `type`, `getText`, `getHtml` | `from './ksa/browser'` |
+| **news** | `search`, `trending`, `breakingNews`, `monitorBrand`, `analyzeSentiment` | `from './ksa/news'` |
+| **social** | `tiktokProfile`, `instagramProfile`, `twitterProfile`, `youtubeProfile`, `*Posts` | `from './ksa/social'` |
+| **companies** | `enrichDomain`, `searchCompanies`, `findSimilar`, `getTechStack` | `from './ksa/companies'` |
+| **email** | `send`, `sendText`, `sendHtml`, `sendWithAttachment`, `sendTemplate` | `from './ksa/email'` |
 
 ## Usage
 
@@ -166,4 +177,87 @@ const text = await getText();
 
 ## Adding New KSAs
 
-See `packages/lakitu/CLAUDE.md` for instructions.
+### Two Types of KSAs
+
+1. **Gateway KSAs** - Call Convex services via cloud gateway (research, data, external APIs)
+2. **Local KSAs** - Operate locally in sandbox (filesystem, bash, local binaries)
+
+### Quick Start
+
+1. Copy the appropriate template from `ksa/_templates/`:
+   - `gateway-ksa.template.ts` for Gateway KSAs
+   - `local-ksa.template.ts` for Local KSAs
+
+2. Create your KSA file:
+   ```bash
+   cp ksa/_templates/gateway-ksa.template.ts ksa/myservice.ts
+   ```
+
+3. Implement your functions:
+   - For gateway KSAs: use `callGateway()` from `./_shared/gateway`
+   - For local KSAs: use `fs`, `exec`, etc.
+
+4. Add to `ksa/index.ts`:
+   ```typescript
+   // Add export
+   export * as myservice from "./myservice";
+
+   // Add to registry
+   {
+     name: "myservice",
+     description: "What this KSA does",
+     category: "research",  // or "data", "create", "system", "ai"
+     functions: ["func1", "func2"],
+     importPath: "./ksa/myservice",
+   },
+   ```
+
+### Gateway KSA Example
+
+```typescript
+import { callGateway } from "./_shared/gateway";
+
+export async function getData(query: string) {
+  return callGateway("services.MyService.internal.call", {
+    endpoint: "/v1/data",
+    params: { q: query },
+  });
+}
+```
+
+### Local KSA Example
+
+```typescript
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
+
+export async function runTool(arg: string) {
+  const { stdout } = await execAsync(`my-tool ${arg}`);
+  return stdout.trim();
+}
+```
+
+### Mapping Services to KSAs
+
+When creating KSAs from existing `convex/services/`:
+
+| Service | KSA | Category |
+|---------|-----|----------|
+| Valyu | web | research |
+| APITube | news | research |
+| ScrapeCreators | social | research |
+| TheCompanies | companies | data |
+| SendGrid | email | create |
+| DataForSEO | seo | research |
+| ScrapeDo | web | research |
+| WhatCMS | cms | data |
+
+### Best Practices
+
+1. **Type-first** - Define types based on service types, simplified for agent use
+2. **JSDoc everything** - The agent learns from your documentation
+3. **Include examples** - Show real usage in @example blocks
+4. **Handle errors gracefully** - Return null/empty instead of throwing when appropriate
+5. **Keep it focused** - Each KSA should do one thing well

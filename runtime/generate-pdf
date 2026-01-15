@@ -1,7 +1,0 @@
-#!/bin/bash
-# PDF Generator wrapper
-# Usage: generate-pdf <output-name> [title]
-# Content is read from stdin
-
-cd /home/user/lakitu
-exec bun run runtime/generate-pdf.ts "$@"

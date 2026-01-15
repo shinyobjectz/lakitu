@@ -1,13 +1,11 @@
 /**
- * Web Skills
+ * Web KSA - Knowledge, Skills, and Abilities
  *
  * Functions for web search and content extraction.
  * Import and use these in your code.
  */
 
-// Gateway config is set by runtime
-const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:3210';
-const JWT = process.env.SANDBOX_JWT || '';
+import { callGateway } from "./_shared/gateway";
 
 // ============================================================================
 // Types
@@ -120,28 +118,3 @@ export async function news(query: string, limit = 10): Promise<NewsArticle[]> {
   }));
 }
 
-// ============================================================================
-// Internal
-// ============================================================================
-
-async function callGateway(path: string, args: Record<string, unknown>) {
-  const response = await fetch(`${GATEWAY_URL}/agent/call`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${JWT}`,
-    },
-    body: JSON.stringify({ path, args }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Gateway error: ${response.status} ${await response.text()}`);
-  }
-
-  const result = await response.json();
-  if (!result.ok) {
-    throw new Error(`Service error: ${result.error || JSON.stringify(result)}`);
-  }
-
-  return result.data;
-}
