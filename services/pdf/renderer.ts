@@ -280,7 +280,8 @@ export function markdownToDocNode(md: string, title?: string): DocNode {
   }
 
   const docTitle = title || firstHeading;
-  const skipFirstHeading = title && firstHeading;
+  // Skip the first heading if we're using it as the document title (either from title arg or from content)
+  const skipFirstHeading = firstHeading && (title ? firstHeading === title : true);
 
   if (docTitle) {
     children.push({ type: 'text', variant: 'title', text: docTitle });

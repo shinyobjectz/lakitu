@@ -109,6 +109,19 @@ export function createArtifactTools(ctx: ActionCtx) {
           };
         }
 
+        // Normalize MIME types to simple types for cloud storage
+        const normalizeType = (t: string): string => {
+          const mimeToSimple: Record<string, string> = {
+            'text/markdown': 'markdown',
+            'text/plain': 'text',
+            'application/json': 'json',
+            'text/csv': 'csv',
+            'text/html': 'html',
+          };
+          return mimeToSimple[t] || t;
+        };
+        const normalizedType = normalizeType(args.type);
+
         let content = args.content;
         let size = 0;
 
@@ -141,7 +154,7 @@ export function createArtifactTools(ctx: ActionCtx) {
         // Save to local sandbox database
         const localId = await ctx.runMutation(api.state.artifacts.save, {
           name: args.name,
-          type: args.type,
+          type: normalizedType,
           content,
           path: args.path || `/artifacts/${args.name}`,
           size,
@@ -151,7 +164,7 @@ export function createArtifactTools(ctx: ActionCtx) {
         // Sync to cloud immediately (don't just queue)
         const cloudResult = await saveToCloud({
           name: args.name,
-          type: args.type,
+          type: normalizedType,
           content,
         });
 
