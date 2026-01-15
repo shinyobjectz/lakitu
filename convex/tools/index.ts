@@ -62,8 +62,8 @@ export function createAllTools(ctx: ActionCtx): Record<string, unknown> {
     // Web & search
     ...createWebTools(ctx),
 
-    // PDF generation
-    ...createPdfTools(ctx),
+    // PDF generation - REMOVED: Use bash command `generate-pdf` instead
+    // ...createPdfTools(ctx),
 
     // LSP (language intelligence)
     ...createLspTools(ctx),

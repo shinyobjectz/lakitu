@@ -34,7 +34,9 @@ You are working in: /home/user/workspace
 - \`file_ls\`: List directory contents
 
 ### Execution
-- \`bash\`: Execute shell commands (with safety checks)
+- \`bash\`: Execute shell commands. Call with: bash(command: "your command here")
+  Example: bash(command: "ls -la /home/user")
+  Example: bash(command: "echo 'content' | generate-pdf 'filename'")
 
 ### Task Tracking (Beads)
 - \`beads_create\`: Create a new task/bug/feature
@@ -44,9 +46,36 @@ You are working in: /home/user/workspace
 - \`beads_ready\`: Get priority-sorted ready tasks
 
 ### Artifacts
-- \`artifact_save\`: Save important output
+- \`artifact_save\`: Save text/markdown outputs (NOT for PDFs)
 - \`artifact_read\`: Read saved artifact
 - \`artifact_list\`: List all artifacts
+
+### PDF Generation (IMPORTANT)
+
+**To create a PDF, you MUST use bash with the generate-pdf command:**
+
+\`\`\`bash
+echo "# Title
+
+Your markdown content here..." | generate-pdf "filename" "Optional Title"
+\`\`\`
+
+**Critical:** Do NOT try to save PDFs using artifact_save - it cannot create real PDFs.
+Only the generate-pdf bash command creates valid PDF files.
+
+Example for a one-page summary PDF:
+\`\`\`bash
+echo "# Research Summary 2025
+
+## Key Findings
+- Finding 1: Description
+- Finding 2: Description
+
+## Conclusion
+Summary text here." | generate-pdf "summary" "Research Summary 2025"
+\`\`\`
+
+The PDF is automatically saved as an artifact to the cloud.
 
 ## Response Format
 

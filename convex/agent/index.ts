@@ -25,7 +25,7 @@ import type { ChainOfThoughtStep, StepStatus } from "../../shared/chain-of-thoug
 import { createStepId, getStepTypeForTool } from "../../shared/chain-of-thought";
 // Note: Zod 4 has native toJSONSchema() - don't need zod-to-json-schema
 
-// Model priority: Gemini 3 Flash Preview (fast, reliable tool calling)
+// Model priority: Gemini 3 Flash Preview
 const DEFAULT_MODEL = "google/gemini-3-flash-preview";
 const FALLBACK_MODELS = [
   "anthropic/claude-haiku-4.5",
@@ -207,6 +207,15 @@ async function callCloudLLM(
     },
   }));
 
+  // Debug: Log tools being sent
+  if (openAITools) {
+    console.log(`[lakitu LLM] Sending ${openAITools.length} tools to LLM`);
+    const bashTool = openAITools.find(t => t.function.name === 'bash');
+    if (bashTool) {
+      console.log(`[lakitu LLM] bash tool: ${JSON.stringify(bashTool)}`);
+    }
+  }
+
   // No provider preference - let OpenRouter choose fastest
 
   const response = await fetch(`${convexUrl}/agent/call`, {
@@ -239,6 +248,18 @@ async function callCloudLLM(
 
   const data = result.data;
   const choice = data.choices?.[0];
+
+  // Debug: Log raw LLM response
+  console.log(`[lakitu LLM DEBUG] finish_reason: ${choice?.finish_reason}`);
+  console.log(`[lakitu LLM DEBUG] message keys: ${choice?.message ? Object.keys(choice.message).join(', ') : 'no message'}`);
+  console.log(`[lakitu LLM DEBUG] tool_calls present: ${!!choice?.message?.tool_calls}`);
+  if (choice?.message?.tool_calls) {
+    console.log(`[lakitu LLM DEBUG] tool_calls count: ${choice.message.tool_calls.length}`);
+    console.log(`[lakitu LLM DEBUG] tool_calls: ${JSON.stringify(choice.message.tool_calls).slice(0, 500)}`);
+  }
+  if (choice?.message?.content) {
+    console.log(`[lakitu LLM DEBUG] content (first 300 chars): ${choice.message.content.slice(0, 300)}`);
+  }
 
   // Extract tool calls if present
   const toolCalls = choice?.message?.tool_calls?.map((tc: any) => {
@@ -314,6 +335,17 @@ async function runAgentLoop(
     const t = tool as any;
     let parameters: Record<string, any> = { type: "object", properties: {} };
 
+    // Debug: Log what the tool object looks like
+    if (name === 'bash') {
+      console.log(`[lakitu DEBUG] bash tool object keys: ${Object.keys(t).join(', ')}`);
+      console.log(`[lakitu DEBUG] bash t.parameters type: ${typeof t.parameters}`);
+      if (t.parameters) {
+        console.log(`[lakitu DEBUG] bash t.parameters keys: ${Object.keys(t.parameters).join(', ')}`);
+        console.log(`[lakitu DEBUG] bash t.parameters.toJSONSchema exists: ${typeof t.parameters.toJSONSchema === 'function'}`);
+        console.log(`[lakitu DEBUG] bash t.parameters._def exists: ${!!t.parameters._def}`);
+      }
+    }
+
     // AI SDK tools have Zod schemas in .parameters - convert to JSON schema
     // Zod 4 has native toJSONSchema() method
     if (t.parameters && typeof t.parameters.toJSONSchema === "function") {
@@ -322,6 +354,9 @@ async function runAgentLoop(
       // Remove $schema metadata that OpenAI doesn't want
       const { $schema, ...cleanSchema } = jsonSchema;
       parameters = cleanSchema;
+      if (name === 'bash') {
+        console.log(`[lakitu DEBUG] bash JSON schema from toJSONSchema: ${JSON.stringify(parameters)}`);
+      }
     } else if (t.parameters && typeof t.parameters.parse === "function") {
       // Older Zod without toJSONSchema - try to extract basic shape
       console.log(`[lakitu] WARNING: Tool ${name} has Zod schema without toJSONSchema`);
@@ -329,6 +364,9 @@ async function runAgentLoop(
     } else if (t.parameters && typeof t.parameters === "object") {
       // Already a JSON schema object
       parameters = t.parameters;
+      if (name === 'bash') {
+        console.log(`[lakitu DEBUG] bash using raw parameters object: ${JSON.stringify(parameters)}`);
+      }
     }
 
     return {
@@ -338,12 +376,12 @@ async function runAgentLoop(
     };
   });
 
-  // Log pdf_create tool def specifically
-  const pdfTool = toolDefs.find(t => t.name === 'pdf_create');
-  if (pdfTool) {
-    console.log(`[lakitu] pdf_create tool def: ${JSON.stringify(pdfTool)}`);
+  // Log bash tool def specifically
+  const bashToolDef = toolDefs.find(t => t.name === 'bash');
+  if (bashToolDef) {
+    console.log(`[lakitu DEBUG] bash final tool def: ${JSON.stringify(bashToolDef)}`);
   } else {
-    console.log(`[lakitu] WARNING: pdf_create tool NOT FOUND in tool definitions!`);
+    console.log(`[lakitu] WARNING: bash tool NOT FOUND in tool definitions!`);
   }
 
   const messages: LLMMessage[] = [
@@ -651,5 +689,63 @@ export const getChainOfThoughtSteps = query({
   args: { threadId: v.string() },
   handler: async (_ctx, args): Promise<ChainOfThoughtStep[]> => {
     return chainOfThoughtSteps.get(args.threadId) || [];
+  },
+});
+
+// ============================================
+// Code Execution Mode (NEW ARCHITECTURE)
+// ============================================
+
+import { runCodeExecLoop, getSteps } from "./codeExecLoop";
+import { getCodeExecSystemPrompt } from "../prompts/codeExec";
+
+/**
+ * Start a thread using code execution mode.
+ *
+ * This is the NEW architecture:
+ * - LLM generates TypeScript code
+ * - Code imports from skills/ and executes
+ * - No JSON tool calls
+ *
+ * Use this instead of startThread for the new code execution model.
+ */
+export const startCodeExecThread = action({
+  args: {
+    prompt: v.string(),
+    context: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const threadId = `codeexec_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+    // Extract gateway config from context
+    const ctxObj = args.context as { gatewayConfig?: { convexUrl: string; jwt: string }; cardId?: string } | undefined;
+
+    if (!ctxObj?.gatewayConfig) {
+      throw new Error("gatewayConfig required for code execution mode");
+    }
+
+    // Log start
+    await ctx.runMutation(api.agent.decisions.log, {
+      threadId,
+      task: args.prompt,
+      decisionType: "tool_selection",
+      selectedTools: ["code_execution"],
+      reasoning: "Using code execution mode - agent will write and execute TypeScript",
+      expectedOutcome: "Agent will generate code that imports from skills/",
+    });
+
+    // Run the code execution loop
+    const systemPrompt = getCodeExecSystemPrompt();
+    const result = await runCodeExecLoop(ctx, systemPrompt, args.prompt, ctxObj.gatewayConfig, {
+      threadId,
+      maxSteps: 10,
+    });
+
+    return {
+      threadId,
+      text: result.text,
+      codeExecutions: result.codeExecutions,
+      chainOfThought: getSteps(threadId),
+    };
   },
 });

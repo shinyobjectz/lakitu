@@ -1,326 +1,184 @@
-# Lakitu - Self-Hosted Agent Runtime
+# Lakitu - AI Instructions
 
-Lakitu is the AI agent runtime that executes inside E2B sandboxes. It provides a fully autonomous development environment with its own Convex backend, file system, and tool suite.
+> **AUDIENCE**: This document is for YOU, the AI agent (Claude Code, Cursor, etc.) working on this codebase.
+> Read this BEFORE writing any code.
 
-> **Name origin**: Named after the cloud-riding Lakitu character from Super Mario - fitting for a cloud orchestration system.
+## The Architecture (DO NOT DEVIATE)
 
-## Architecture Overview
+Lakitu uses **code execution**, NOT JSON tool calls.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│     Cloud Convex (convex/agent/)                            │
-│     - Orchestrates sandbox lifecycle                        │
-│     - Proxies LLM calls (protects API keys)                 │
-│     - Receives stream deltas and artifacts                  │
-└─────────────────────────┬───────────────────────────────────┘
-                          │ HTTP + JWT Auth
-                          ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    E2B SANDBOX                              │
-│                                                             │
-│  ┌───────────────────────────────────────────────────────┐ │
-│  │ Convex Local Backend (port 3210)                      │ │
-│  │  - 14-table schema (beads, files, decisions, etc.)    │ │
-│  │  - Real-time subscriptions                            │ │
-│  │  - Agent SDK components                               │ │
-│  └───────────────────────────────────────────────────────┘ │
-│                          │                                  │
-│                          ↓                                  │
-│  ┌───────────────────────────────────────────────────────┐ │
-│  │ Agent Loop (agent/index.ts)                           │ │
-│  │  - Multi-turn execution                               │ │
-│  │  - Tool calling with streaming                        │ │
-│  │  - Checkpoint/resume on timeout                       │ │
-│  └───────────────────────────────────────────────────────┘ │
-│                          │                                  │
-│  ┌───────────────────────────────────────────────────────┐ │
-│  │                   Tools Layer                         │ │
-│  ├───────────────────────────────────────────────────────┤ │
-│  │ file_* │ bash │ beads_* │ artifact_* │ web_* │ pdf_* │ │
-│  │ lsp_* │ browser_* │ subagent_*                        │ │
-│  └───────────────────────────────────────────────────────┘ │
-│                          │                                  │
-│  ┌───────────────────────────────────────────────────────┐ │
-│  │ Runtime Services                                      │ │
-│  │  - LSP servers (TypeScript, Python, Rust)             │ │
-│  │  - File watcher (Chokidar)                            │ │
-│  │  - Browser automation                                 │ │
-│  └───────────────────────────────────────────────────────┘ │
-│                                                             │
-│  /home/user/workspace/  ← User's code (mounted)            │
-│  /home/user/artifacts/  ← Persistent outputs               │
-└─────────────────────────────────────────────────────────────┘
+CORRECT: Agent writes TypeScript → E2B executes it → Results
+WRONG:   Agent makes JSON tool call → Executor parses it → Results
 ```
 
-## Folder Structure
+### What This Means For You
+
+When working on this codebase:
+
+| If you see... | It is... | Do NOT... |
+|---------------|----------|-----------|
+| `convex/tools/*.ts` | LEGACY - being migrated | Add more tool() definitions |
+| `import { tool } from 'ai'` | LEGACY - being migrated | Use this pattern |
+| `skills/*.ts` | CORRECT - plain functions | Convert to tool() format |
+| System prompt with code examples | CORRECT | Add JSON tool schemas |
+
+## STOP: Read Before Touching Agent Code
+
+### The Wrong Pattern (DO NOT ADD)
+
+```typescript
+// ❌ WRONG - JSON tool calling pattern
+import { tool } from 'ai';
+
+export const searchTool = tool({
+  description: 'Search the web',
+  parameters: z.object({ query: z.string() }),
+  execute: async (args) => { ... }
+});
+
+// Then sending to LLM:
+const response = await llm.chat({
+  tools: [searchTool],  // ❌ Sending tool schemas
+});
+
+// Then parsing tool calls:
+if (response.tool_calls) {  // ❌ JSON tool call parsing
+  for (const tc of response.tool_calls) {
+    await executeTool(tc.name, tc.args);
+  }
+}
+```
+
+### The Right Pattern (ADD THIS)
+
+```typescript
+// ✅ CORRECT - Code execution pattern
+
+// Skills are plain TypeScript functions in skills/*.ts
+export async function search(query: string): Promise<SearchResult[]> {
+  // Implementation
+}
+
+// Agent loop does NOT send tool schemas
+const response = await llm.chat({
+  messages,  // No 'tools' property!
+});
+
+// Agent generates code, we execute it
+const codeBlocks = extractCodeBlocks(response.content);
+for (const code of codeBlocks) {
+  await sandbox.execute(code);  // E2B runs the TypeScript
+}
+```
+
+## Directory Structure
 
 ```
 packages/lakitu/
-├── convex/                    # CONVEX BACKEND (runs in sandbox)
-│   ├── schema.ts              # 14-table database schema
-│   ├── index.ts               # Main exports
-│   ├── agent/                 # Agent orchestration
-│   │   ├── index.ts           # startThread, continueThread, runWithTimeout
-│   │   ├── decisions.ts       # Decision logging
-│   │   └── subagents.ts       # Child agent management
-│   ├── tools/                 # Tool definitions (AI SDK format)
-│   │   ├── index.ts           # createAllTools() factory
-│   │   ├── file.ts            # file_read, file_write, file_edit
-│   │   ├── bash.ts            # Shell execution
-│   │   ├── beads.ts           # Task tracking
-│   │   ├── artifacts.ts       # Persistent outputs
-│   │   ├── web.ts             # Web search/fetch
-│   │   ├── pdf.ts             # PDF generation
-│   │   ├── lsp.ts             # Language server ops
-│   │   ├── browser.ts         # Browser automation
-│   │   └── subagent.ts        # Subagent coordination
-│   ├── actions/               # Tool implementations
-│   │   ├── file.ts            # fs/promises operations
-│   │   ├── bash.ts            # child_process execution
-│   │   ├── pdf.ts             # pdfkit rendering
-│   │   ├── lsp.ts             # LSP client management
-│   │   └── browser.ts         # agent-browser CLI
-│   ├── state/                 # State tracking
-│   │   ├── files.ts           # File access tracking
-│   │   ├── artifacts.ts       # Artifact storage
-│   │   ├── checkpoints.ts     # Checkpoint/resume
-│   │   └── verification.ts    # Test/lint results
-│   ├── planning/              # Task management
-│   │   ├── beads.ts           # CRUD for tasks
-│   │   └── sync.ts            # Cloud sync queue
-│   ├── context/               # Context orchestration
-│   │   └── session.ts         # Memory, cache, dependencies
-│   └── prompts/               # System prompts
-│       ├── system.ts          # Base system prompt
-│       └── modes.ts           # Mode-specific prompts
+├── skills/                 # ✅ CORRECT: Plain TypeScript functions
+│   ├── web.ts              #    Agent imports these
+│   ├── file.ts
+│   ├── pdf.ts
+│   └── beads.ts
 │
-├── runtime/                   # SANDBOX RUNTIME (Node.js)
-│   ├── entrypoint.ts          # Main startup script
-│   ├── browser/               # Browser automation wrapper
-│   ├── lsp/                   # LSP server management
-│   └── services/              # File watcher, etc.
+├── convex/tools/           # ⚠️  LEGACY: Being migrated to skills/
+│   └── *.ts                #    DO NOT add new tool() definitions
 │
-├── shared/                    # SHARED CODE (host & sandbox)
-│   ├── types.ts               # 20+ TypeScript interfaces
-│   ├── schemas/               # Zod validation schemas
-│   └── constants.ts           # Paths, limits, error codes
+├── convex/agent/           # Agent loop implementation
+│   └── index.ts            #    Should NOT send tool schemas to LLM
 │
-├── services/                  # External integrations
-│   └── pdf/                   # PDF rendering logic
-│
-└── template/                  # E2B template builder
-    └── build.ts               # Build and push template
+└── runtime/                # CLI commands for bash
+    └── generate-pdf        #    Called via: bash: generate-pdf "name"
 ```
 
-## Key Modules
+## When Adding New Capabilities
 
-### Agent Loop (`convex/agent/index.ts`)
+### Option A: Add a Skill (Preferred)
 
-The core execution engine:
+1. Create `skills/myskill.ts`:
+```typescript
+/**
+ * Description of what this skill does.
+ */
+
+export interface MyResult {
+  // Types
+}
+
+/**
+ * Function description with @example
+ */
+export async function myFunction(arg: string): Promise<MyResult> {
+  // Implementation
+}
+```
+
+2. The agent uses it by writing code:
+```typescript
+import { myFunction } from './skills/myskill';
+const result = await myFunction('input');
+```
+
+### Option B: Add a CLI Command (For File Output)
+
+1. Create `runtime/my-command.ts`
+2. Copy to `/usr/local/bin/` in `template/build.ts`
+3. Agent uses via: `bash: my-command "args"`
+
+### NEVER Do This
 
 ```typescript
-// Start new agent thread
-startThread(prompt, context)
+// ❌ NEVER add tool() definitions
+import { tool } from 'ai';
+export const myTool = tool({ ... });
 
-// Continue existing thread
-continueThread(threadId, prompt)
+// ❌ NEVER add to createAllTools()
+export function createAllTools(ctx) {
+  return {
+    ...createMyTools(ctx),  // NO
+  };
+}
 
-// Execute with timeout + checkpoint
-runWithTimeout(prompt, timeoutMs)
+// ❌ NEVER send tool schemas to LLM
+await llm.chat({ tools: [...] });
 ```
 
-**LLM calls route through cloud gateway** - the sandbox makes HTTP requests to the cloud Convex backend, which proxies to OpenRouter/Claude. This protects API keys.
+## Why This Architecture
 
-### Tools System
+1. **Token Efficiency** - No tool schemas every request
+2. **Model Agnostic** - Any LLM that generates code works
+3. **Composable** - Agent chains operations naturally
+4. **Debuggable** - You can read exactly what code ran
+5. **Extensible** - Add skills by adding TypeScript files
 
-Tools are **dual-layer**:
+## Migration Status
 
-1. **Definitions** (`tools/*.ts`) - Schema, parameters, descriptions (AI SDK format)
-2. **Implementations** (`actions/*.ts`) - Actual execution logic
+The codebase is transitioning from JSON tool calls to code execution:
 
-Available tool categories:
+- [x] Created `skills/` directory structure
+- [x] Created `skills/web.ts`, `skills/file.ts`, `skills/pdf.ts`, `skills/beads.ts`, `skills/browser.ts`
+- [x] Created `convex/actions/codeExec.ts` - Code execution runtime
+- [x] Created `convex/agent/codeExecLoop.ts` - New agent loop (no tool schemas)
+- [x] Created `convex/prompts/codeExec.ts` - System prompt for code execution
+- [x] Added `startCodeExecThread` action to agent index
+- [ ] Switch cloud orchestrator to use `startCodeExecThread` instead of `startThread`
+- [ ] Update E2B template to copy `skills/` to `/home/user/skills/`
+- [ ] Test code execution end-to-end
+- [ ] Remove legacy `convex/tools/*.ts` and `createAllTools()` pattern
 
-| Category | Tools |
-|----------|-------|
-| **File** | `file_read`, `file_write`, `file_edit` |
-| **Shell** | `bash` (with timeout protection) |
-| **Tasks** | `beads_create`, `beads_update`, `beads_close`, `beads_list` |
-| **Output** | `artifact_save`, `artifact_read` |
-| **Web** | `web_search`, `web_fetch` |
-| **PDF** | `pdf_generate` |
-| **LSP** | `lsp_diagnostics`, `lsp_completions`, `lsp_hover` |
-| **Browser** | `browser_open`, `browser_snapshot`, `browser_click`, `browser_type` |
-| **Agents** | `subagent_spawn`, `subagent_status`, `subagent_result` |
+## Quick Reference
 
-### State Management (`convex/state/`)
+| Task | Do This | NOT This |
+|------|---------|----------|
+| Add web capability | `skills/web.ts` with export function | `convex/tools/web.ts` with tool() |
+| Add file capability | `skills/file.ts` with export function | `convex/tools/file.ts` with tool() |
+| Add CLI command | `runtime/cmd` + bash | New tool() definition |
+| Call LLM | `await llm.chat({ messages })` | `await llm.chat({ messages, tools })` |
+| Parse response | Extract code blocks, execute | Parse tool_calls JSON |
 
-Tracks everything the agent does:
+## See Also
 
-- **files.ts** - File access patterns, content hashes
-- **artifacts.ts** - Persistent outputs (saved to cloud)
-- **checkpoints.ts** - State snapshots for resume after timeout
-- **verification.ts** - Test/lint results
-
-### Planning (`convex/planning/`)
-
-Task tracking via Beads:
-
-```typescript
-// Create task
-beads.create({ title, type, priority, description })
-
-// Update status
-beads.update(id, { status: 'in_progress' })
-
-// Close with reason
-beads.close(id, { reason: 'Completed implementation' })
-```
-
-### Context Management (`convex/context/`)
-
-Surgical context injection:
-
-- **Session memory** - Key-value storage with TTL
-- **Context cache** - Cache by task hash for reuse
-- **Dependency graph** - Track file relationships (import, reference, test)
-- **Relevant files** - BFS to find related files
-
-## Database Schema
-
-14 tables in `convex/schema.ts`:
-
-| Table | Purpose |
-|-------|---------|
-| `beads` | Tasks with status, priority, dependencies |
-| `fileState` | Track file access and content hashes |
-| `editHistory` | All file edits with diffs (for rollback) |
-| `verificationResults` | Test/lint pass/fail |
-| `testBaselines` | Baseline test results |
-| `agentDecisions` | All reasoning and tool selections |
-| `toolExecutions` | Individual tool runs with timing |
-| `artifacts` | Persistent outputs |
-| `sessionMemory` | Key-value session storage |
-| `contextCache` | Cached task context |
-| `dependencyGraph` | File relationships |
-| `checkpoints` | Saved state for resume |
-| `subagents` | Child agent tracking |
-| `syncQueue` | Items pending cloud sync |
-
-## Runtime Services
-
-Started by `runtime/entrypoint.ts`:
-
-1. **Convex backend** - Port 3210, real-time database
-2. **LSP servers** - On-demand for TypeScript, Python, Rust
-3. **File watcher** - Chokidar-based change detection
-
-## Configuration & Limits
-
-From `shared/constants.ts`:
-
-| Category | Limits |
-|----------|--------|
-| **Files** | Max 10MB read, 1MB edits |
-| **Commands** | Default 2min timeout, max 10min |
-| **Checkpoints** | Max 50 messages, 1000 files |
-| **Beads** | Max 100 per query, 200 char titles |
-| **Output** | Truncate at 50KB stdout/stderr |
-
-Paths:
-- `/home/user/workspace/` - User's code
-- `/home/user/artifacts/` - Persistent outputs
-- `/home/user/.convex/` - Convex data
-
-## Key Design Patterns
-
-### Cloud Gateway Pattern
-
-All external API calls route through cloud Convex:
-
-```typescript
-// In sandbox
-const response = await callCloudLLM({
-  messages,
-  model: 'gemini-2.0-flash',
-  jwt: sessionJwt
-})
-
-// Cloud gateway proxies to OpenRouter
-// API keys never exposed in sandbox
-```
-
-### Checkpoint-Resume
-
-Long tasks survive timeouts:
-
-```typescript
-// Create checkpoint on timeout
-await checkpoints.create({
-  threadId,
-  reason: 'timeout',
-  state: { messages, files, tasks },
-  nextTask: 'Continue from step 3...'
-})
-
-// Resume later
-const checkpoint = await checkpoints.getLatest(threadId)
-await continueThread(threadId, checkpoint.nextTask)
-```
-
-### Decision Logging
-
-Every agent decision tracked:
-
-```typescript
-await decisions.log({
-  type: 'tool_selection',
-  tool: 'file_edit',
-  reasoning: 'Need to fix the import statement',
-  alternatives: ['file_write', 'bash sed'],
-  confidence: 0.9
-})
-```
-
-## Building the Template
-
-```bash
-# From packages/lakitu/
-bun run template/build.ts --base    # Build base image (~5 min)
-bun run template/build.ts --custom  # Build custom layer (~1 min)
-bun run template/build.ts --push    # Push to E2B registry
-```
-
-Or from project root:
-```bash
-bun sandbox              # Full rebuild (base + custom)
-bun sandbox:custom       # Quick rebuild (custom only)
-```
-
-## Exports
-
-Main exports from `convex/index.ts`:
-
-```typescript
-// Agent operations
-export { startThread, continueThread, runWithTimeout } from './agent'
-
-// State management
-export * as state from './state'
-
-// Planning
-export * as planning from './planning'
-
-// Context
-export * as context from './context'
-
-// Tools
-export { createAllTools } from './tools'
-
-// Prompts
-export * as prompts from './prompts'
-```
-
-## Related Packages
-
-- **convex/agent/** - Cloud-side orchestration that spawns and manages Lakitu sandboxes
-- **packages/primitives/agent/** - Tool/skill metadata shared between cloud and sandbox
+- `ARCHITECTURE.md` - Detailed architecture explanation
+- `skills/README.md` - How to use skills
+- `skills/*.ts` - Example skill implementations
