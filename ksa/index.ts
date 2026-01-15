@@ -32,6 +32,12 @@ export * as browser from "./browser";
 export * as pdf from "./pdf";
 export * as email from "./email";
 
+// App-wide KSAs (app services and management)
+export * as boards from "./boards";
+export * as brandscan from "./brandscan";
+export * as workspaces from "./workspaces";
+export * as frames from "./frames";
+
 // Legacy alias - use 'artifacts' instead
 /** @deprecated Use 'artifacts' instead */
 export { saveArtifact, readArtifact, listArtifacts } from "./artifacts";
@@ -254,6 +260,109 @@ export const KSA_REGISTRY: KSAInfo[] = [
     icon: "mdi:email-outline",
     configSchema: CONFIG_SCHEMAS.email,
     defaults: CONFIG_DEFAULTS.email,
+  },
+
+  // =========================================================================
+  // APP-WIDE KSAs - App Services and Management (Opt-in)
+  // =========================================================================
+  {
+    name: "boards",
+    description: "Create, manage, and execute kanban boards with automated workflows. Supports templates for common use cases.",
+    category: "skills",
+    functions: [
+      "listBoards",
+      "getBoard",
+      "createBoard",
+      "addCard",
+      "runCard",
+      "getCardStatus",
+      "waitForCard",
+      "stopCard",
+      "getCompletedCards",
+      "listTemplates",
+      "getTemplate",
+      "createBoardFromTemplate",
+    ],
+    importPath: "./ksa/boards",
+    servicePaths: [
+      "features.kanban.boards.list",
+      "features.kanban.boards.get",
+      "features.kanban.boards.create",
+      "features.kanban.boards.update",
+      "features.kanban.boards.addTask",
+      "features.kanban.boards.addCard",
+      "features.kanban.boards.getCard",
+      "features.kanban.boards.getCardWithArtifacts",
+      "features.kanban.boards.stopCard",
+      "features.kanban.boards.getCompletedCards",
+      "features.kanban.templates.listTemplates",
+      "features.kanban.templates.getTemplate",
+      "features.kanban.templates.createBoardFromTemplate",
+      "agent.workflows.agentBoard.startCardExecution",
+    ],
+    icon: "mdi:view-kanban",
+  },
+  {
+    name: "brandscan",
+    description: "Initiate and monitor brand intelligence scans for domains",
+    category: "skills",
+    functions: ["startScan", "getScanStatus", "waitForScan", "getBrandData", "getBrandSummary", "listBrands", "getBrandByDomain", "listScans"],
+    importPath: "./ksa/brandscan",
+    servicePaths: [
+      "features.brands.orchestration.scans.startFullScan",
+      "features.brands.orchestration.scans.getLatest",
+      "features.brands.orchestration.scans.list",
+      "features.brands.core.crud.get",
+      "features.brands.core.crud.getByDomain",
+      "features.brands.core.crud.list",
+      "features.brands.core.products.getBrandIntelligenceSummary",
+    ],
+    icon: "mdi:radar",
+  },
+  {
+    name: "workspaces",
+    description: "Create and manage design workspaces with canvas tools",
+    category: "skills",
+    functions: ["listWorkspaces", "createWorkspace", "getWorkspace", "updateWorkspaceName", "deleteWorkspace", "getCanvas", "saveCanvas", "addCanvasElement", "removeCanvasElement", "updateCanvasElement", "addConnection", "listDesigns", "saveDesign"],
+    importPath: "./ksa/workspaces",
+    servicePaths: [
+      "features.workspaces.workspaces.list",
+      "features.workspaces.workspaces.create",
+      "features.workspaces.workspaces.get",
+      "features.workspaces.workspaces.updateName",
+      "features.workspaces.workspaces.remove",
+      "features.workspaces.canvas.get",
+      "features.workspaces.canvas.save",
+      "features.workspaces.designs.listDesigns",
+      "features.workspaces.designs.saveDesign",
+    ],
+    icon: "mdi:palette",
+  },
+  {
+    name: "frames",
+    description: "Generate and edit visual frames (HTML/Tailwind/Svelte components)",
+    category: "skills",
+    functions: ["createFrame", "getFrame", "listFrames", "updateFrame", "deleteFrame", "generateFrame", "createPage", "getPage", "listPages", "updatePage", "getTemplates", "getAdSpecs", "snapshotFrame", "rollbackFrame", "trackView", "trackConversion"],
+    importPath: "./ksa/frames",
+    servicePaths: [
+      "features.frames.crud.createFrame",
+      "features.frames.crud.getFrame",
+      "features.frames.crud.listFrames",
+      "features.frames.crud.updateFrame",
+      "features.frames.crud.deleteFrame",
+      "features.frames.crud.createPage",
+      "features.frames.crud.getPage",
+      "features.frames.crud.listPages",
+      "features.frames.crud.updatePage",
+      "features.frames.templates.listTemplates",
+      "features.frames.ads.getAdSpecs",
+      "features.frames.versions.snapshot",
+      "features.frames.versions.rollback",
+      "features.frames.analytics.trackView",
+      "features.frames.analytics.trackConversion",
+      "services.OpenRouter.internal.chat",
+    ],
+    icon: "mdi:image-frame",
   },
 ];
 
