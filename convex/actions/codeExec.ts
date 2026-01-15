@@ -1,3 +1,5 @@
+"use node";
+
 /**
  * Code Execution Action
  *
