@@ -52,7 +52,7 @@ async function saveArtifactToCloud(
       },
       body: JSON.stringify({
         path: "features.kanban.artifacts.saveArtifactWithBackup",
-        type: "mutation",
+        type: "action",
         args: {
           cardId,
           artifact: { name, type, content },
