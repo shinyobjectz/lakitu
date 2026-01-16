@@ -22,7 +22,68 @@
  * close(researchTask.id, 'Found 5 relevant sources');
  */
 
-import { callGateway, fireAndForget } from "./_shared/gateway";
+// ============================================================================
+// Local Convex Client (bypasses cloud gateway, calls sandbox Convex directly)
+// ============================================================================
+
+// The sandbox's local Convex URL (NOT the cloud gateway)
+const LOCAL_CONVEX_URL = process.env.CONVEX_URL || "http://localhost:3210";
+
+async function callLocalConvex<T = unknown>(
+  path: string,
+  args: Record<string, unknown>,
+  type: "query" | "mutation" | "action" = "mutation"
+): Promise<T> {
+  // Convert path like "planning.beads.create" to Convex format "planning/beads:create"
+  const parts = path.split(".");
+  const funcName = parts.pop()!;
+  const modulePath = parts.join("/");
+  const convexPath = `${modulePath}:${funcName}`;
+
+  const response = await fetch(`${LOCAL_CONVEX_URL}/api/${type}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      path: convexPath,
+      args,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Local Convex error (${response.status}): ${text}`);
+  }
+
+  const result = await response.json();
+  return result.value as T;
+}
+
+function fireLocalConvex(
+  path: string,
+  args: Record<string, unknown>,
+  type: "query" | "mutation" | "action" = "mutation"
+): void {
+  // Convert path like "planning.beads.create" to Convex format "planning/beads:create"
+  const parts = path.split(".");
+  const funcName = parts.pop()!;
+  const modulePath = parts.join("/");
+  const convexPath = `${modulePath}:${funcName}`;
+
+  fetch(`${LOCAL_CONVEX_URL}/api/${type}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      path: convexPath,
+      args,
+    }),
+  }).catch(() => {
+    // Fire and forget - ignore errors
+  });
+}
 
 // ============================================================================
 // Types
@@ -70,39 +131,37 @@ export interface CreateResult {
 }
 
 // ============================================================================
-// Gateway wrapper with fallback
+// Local Convex wrapper with fallback
 // ============================================================================
 
-async function callCloud(
+async function callLocal(
   servicePath: string,
   args: Record<string, unknown>,
   type: "query" | "action" | "mutation" = "mutation"
 ): Promise<any> {
-  const convexUrl = process.env.CONVEX_URL;
-  if (!convexUrl) {
+  if (!LOCAL_CONVEX_URL) {
     console.log("[beads] CONVEX_URL not configured, using in-memory fallback");
-    return { error: "Gateway not configured" };
+    return { error: "Local Convex not configured" };
   }
 
   try {
-    return await callGateway(servicePath, args, type);
+    return await callLocalConvex(servicePath, args, type);
   } catch (error) {
-    console.error(`[beads] Cloud exception: ${error}`);
+    console.error(`[beads] Local Convex exception: ${error}`);
     return { error: error instanceof Error ? error.message : String(error) };
   }
 }
 
-function fireCloud(
+function fireLocal(
   servicePath: string,
   args: Record<string, unknown>,
   type: "query" | "action" | "mutation" = "mutation"
 ): void {
-  const convexUrl = process.env.CONVEX_URL;
-  if (!convexUrl) {
+  if (!LOCAL_CONVEX_URL) {
     console.log("[beads] CONVEX_URL not configured, skipping fire-and-forget");
     return;
   }
-  fireAndForget(servicePath, args, type);
+  fireLocalConvex(servicePath, args, type);
 }
 
 // In-memory fallback for when gateway isn't available
@@ -131,7 +190,7 @@ export async function create(options: CreateOptions): Promise<CreateResult> {
   console.log(`[beads] Creating task: "${options.title}"`);
 
   // Try cloud first
-  const result = await callCloud("planning.beads.create", {
+  const result = await callLocal("planning.beads.create", {
     title: options.title,
     type: options.type || "task",
     priority: options.priority ?? 2,
@@ -188,13 +247,13 @@ export async function update(id: string, options: UpdateOptions): Promise<void> 
 
   // Fire-and-forget by default for speed
   if (!blocking) {
-    fireCloud("planning.beads.update", { id, ...updateFields });
+    fireLocal("planning.beads.update", { id, ...updateFields });
     console.log(`[beads] Updated task (fire-and-forget): ${id}`);
     return;
   }
 
   // Blocking mode - wait for server
-  const result = await callCloud("planning.beads.update", { id, ...updateFields });
+  const result = await callLocal("planning.beads.update", { id, ...updateFields });
   if (!result.error) {
     console.log(`[beads] Updated task in cloud: ${id}`);
   }
@@ -226,13 +285,13 @@ export async function close(id: string, reason?: string, options?: CloseOptions)
 
   // Fire-and-forget by default for speed
   if (!options?.blocking) {
-    fireCloud("planning.beads.close", { id, reason });
+    fireLocal("planning.beads.close", { id, reason });
     console.log(`[beads] Closed task (fire-and-forget): ${id}`);
     return;
   }
 
   // Blocking mode - wait for server
-  const result = await callCloud("planning.beads.close", { id, reason });
+  const result = await callLocal("planning.beads.close", { id, reason });
   if (!result.error) {
     console.log(`[beads] Closed task in cloud: ${id}`);
   }
@@ -255,7 +314,7 @@ export async function list(options?: {
   console.log(`[beads] Listing tasks: ${JSON.stringify(options || {})}`);
 
   // Try cloud first
-  const result = await callCloud(
+  const result = await callLocal(
     "planning.beads.list",
     {
       status: options?.status,
@@ -304,7 +363,7 @@ export async function getReady(): Promise<Issue[]> {
   console.log(`[beads] Getting ready tasks`);
 
   // Try cloud first
-  const result = await callCloud("planning.beads.getReady", {}, "query");
+  const result = await callLocal("planning.beads.getReady", {}, "query");
 
   if (!result.error && Array.isArray(result)) {
     console.log(`[beads] Found ${result.length} ready tasks from cloud`);
@@ -343,7 +402,7 @@ export async function get(id: string): Promise<Issue | null> {
   console.log(`[beads] Getting task: ${id}`);
 
   // Try cloud first
-  const result = await callCloud("planning.beads.get", { id }, "query");
+  const result = await callLocal("planning.beads.get", { id }, "query");
 
   if (!result.error && result) {
     console.log(`[beads] Got task from cloud: ${id}`);

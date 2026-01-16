@@ -19,6 +19,70 @@ import { createSubagentToolset } from "../tools";
 const DEFAULT_MODEL = "google/gemini-3-flash-preview";
 
 // ============================================
+// Progress Emission (to cloud thread)
+// ============================================
+
+interface ChainOfThoughtStep {
+  id: string;
+  type: "thinking" | "tool" | "search" | "file" | "complete" | "error";
+  label: string;
+  status: "active" | "complete" | "error";
+  details?: string;
+}
+
+/**
+ * Emit subagent progress to the cloud thread for UI display.
+ * This calls the cloud Convex gateway to update the thread messages.
+ */
+async function emitProgress(
+  parentThreadId: string | undefined,
+  subagentId: string,
+  name: string,
+  task: string,
+  status: "spawning" | "running" | "completed" | "failed",
+  options?: {
+    progress?: number;
+    result?: string;
+    error?: string;
+    children?: ChainOfThoughtStep[];
+  }
+): Promise<void> {
+  if (!parentThreadId) return; // No parent thread to emit to
+
+  const convexUrl = process.env.CONVEX_URL;
+  const jwt = process.env.SANDBOX_JWT;
+
+  if (!convexUrl || !jwt) return; // Can't emit without credentials
+
+  try {
+    await fetch(`${convexUrl}/agent/call`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${jwt}`,
+      },
+      body: JSON.stringify({
+        path: "agent.workflows.crudThreads.emitSubagentProgress",
+        args: {
+          threadId: parentThreadId,
+          subagentId,
+          name,
+          task,
+          status,
+          progress: options?.progress,
+          result: options?.result,
+          error: options?.error,
+          children: options?.children,
+        },
+      }),
+    });
+  } catch (e) {
+    // Don't fail the subagent if progress emission fails
+    console.error("[subagent] Failed to emit progress:", e);
+  }
+}
+
+// ============================================
 // Cloud LLM Gateway (shared with main agent)
 // ============================================
 
@@ -153,6 +217,7 @@ function createSubagentId(): string {
 export const spawn = internalAction({
   args: {
     parentThreadId: v.optional(v.string()),
+    cloudThreadId: v.optional(v.string()), // Cloud thread ID for progress emission
     name: v.string(),
     task: v.string(),
     tools: v.array(v.string()),
@@ -160,6 +225,15 @@ export const spawn = internalAction({
   },
   handler: async (ctx, args): Promise<SpawnResult> => {
     const subagentId = createSubagentId();
+
+    // Emit spawning progress to cloud thread
+    await emitProgress(
+      args.cloudThreadId,
+      subagentId,
+      args.name,
+      args.task,
+      "spawning"
+    );
 
     // Record subagent in database
     await ctx.runMutation(internal.agent.subagents.internalRecordSubagent, {
@@ -174,6 +248,7 @@ export const spawn = internalAction({
     // Execute asynchronously using scheduler
     await ctx.scheduler.runAfter(0, internal.agent.subagents.execute, {
       threadId: subagentId,
+      cloudThreadId: args.cloudThreadId,
       task: args.task,
       tools: args.tools,
       model: args.model,
@@ -261,23 +336,148 @@ async function runSubagentLoop(
 }
 
 /**
+ * Execute subagent task with tool loop and progress emission
+ */
+async function runSubagentLoopWithProgress(
+  ctx: any,
+  systemPrompt: string,
+  task: string,
+  toolNames: string[],
+  model: string,
+  maxSteps: number = 5,
+  onProgress?: (step: ChainOfThoughtStep) => Promise<void>
+): Promise<{ text: string; toolCalls: ToolCall[] }> {
+  // Create tools for this subagent
+  const tools = createSubagentToolset(ctx, toolNames);
+  const toolDefs = Object.entries(tools).map(([name, tool]) => ({
+    name,
+    description: (tool as any).description || `Tool: ${name}`,
+    parameters: (tool as any).parameters || { type: "object", properties: {} },
+  }));
+
+  const messages: LLMMessage[] = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: task },
+  ];
+
+  const allToolCalls: ToolCall[] = [];
+  let finalText = "";
+  let stepCounter = 0;
+
+  for (let step = 0; step < maxSteps; step++) {
+    // Emit thinking step
+    if (onProgress) {
+      await onProgress({
+        id: `step_${stepCounter++}`,
+        type: "thinking",
+        label: "Analyzing task...",
+        status: "active",
+      });
+    }
+
+    const response = await callCloudLLM(messages, {
+      model,
+      tools: toolDefs.length > 0 ? toolDefs : undefined,
+    });
+
+    if (!response.toolCalls || response.toolCalls.length === 0) {
+      finalText = response.text;
+      break;
+    }
+
+    const toolResults: string[] = [];
+    for (const tc of response.toolCalls) {
+      allToolCalls.push(tc);
+
+      // Emit tool step (active)
+      const stepId = `step_${stepCounter++}`;
+      const toolType = getToolType(tc.toolName);
+
+      if (onProgress) {
+        await onProgress({
+          id: stepId,
+          type: toolType,
+          label: `Using ${tc.toolName}`,
+          status: "active",
+          details: JSON.stringify(tc.args).slice(0, 100),
+        });
+      }
+
+      try {
+        const tool = tools[tc.toolName];
+        if (!tool) {
+          toolResults.push(`Error: Unknown tool "${tc.toolName}"`);
+          continue;
+        }
+
+        const result = await (tool as any).execute(tc.args, { toolCallId: `${step}-${tc.toolName}` });
+        toolResults.push(typeof result === "string" ? result : JSON.stringify(result));
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        toolResults.push(`Error executing ${tc.toolName}: ${msg}`);
+      }
+    }
+
+    messages.push({
+      role: "assistant",
+      content: response.text || `Called tools: ${response.toolCalls.map((t) => t.toolName).join(", ")}`,
+    });
+
+    messages.push({
+      role: "user",
+      content: `Tool results:\n${toolResults.join("\n\n")}`,
+    });
+
+    if (response.finishReason === "stop") {
+      finalText = response.text;
+      break;
+    }
+  }
+
+  return { text: finalText, toolCalls: allToolCalls };
+}
+
+/**
+ * Map tool names to step types for progress display
+ */
+function getToolType(toolName: string): ChainOfThoughtStep["type"] {
+  const lowered = toolName.toLowerCase();
+  if (lowered.includes("search") || lowered.includes("web")) return "search";
+  if (lowered.includes("file") || lowered.includes("read") || lowered.includes("write")) return "file";
+  return "tool";
+}
+
+/**
  * Execute subagent task
  */
 export const execute = internalAction({
   args: {
     threadId: v.string(),
+    cloudThreadId: v.optional(v.string()), // Cloud thread ID for progress emission
     task: v.string(),
     tools: v.array(v.string()),
     model: v.string(),
     name: v.string(),
   },
   handler: async (ctx, args): Promise<ExecuteResult> => {
+    const children: ChainOfThoughtStep[] = [];
+
     try {
       // Update status to running
       await ctx.runMutation(internal.agent.subagents.updateStatus, {
         threadId: args.threadId,
         status: "running",
       });
+
+      // Emit running progress to cloud thread
+      await emitProgress(
+        args.cloudThreadId,
+        args.threadId,
+        args.name,
+        args.task,
+        "running",
+        { children }
+      );
 
       // Build system prompt for subagent
       const systemPrompt = `You are ${args.name}, a specialized subagent.
@@ -290,14 +490,30 @@ Guidelines:
 - Report results clearly
 - If blocked, explain why`;
 
-      // Execute using cloud gateway
-      const result = await runSubagentLoop(
+      // Execute using cloud gateway with progress callback
+      const onProgress = async (step: ChainOfThoughtStep) => {
+        children.push(step);
+        await emitProgress(
+          args.cloudThreadId,
+          args.threadId,
+          args.name,
+          args.task,
+          "running",
+          {
+            progress: Math.min(95, children.length * 15), // Approximate progress
+            children
+          }
+        );
+      };
+
+      const result = await runSubagentLoopWithProgress(
         ctx,
         systemPrompt,
         args.task,
         args.tools,
         args.model || DEFAULT_MODEL,
-        5
+        5,
+        onProgress
       );
 
       // Update with result
@@ -310,6 +526,28 @@ Guidelines:
         },
       });
 
+      // Mark all children as complete and emit final progress
+      const completedChildren = children.map((c) => ({
+        ...c,
+        status: "complete" as const,
+      }));
+      completedChildren.push({
+        id: `${args.threadId}_complete`,
+        type: "complete",
+        label: "Task completed",
+        status: "complete",
+        details: result.text.slice(0, 100),
+      });
+
+      await emitProgress(
+        args.cloudThreadId,
+        args.threadId,
+        args.name,
+        args.task,
+        "completed",
+        { progress: 100, result: result.text, children: completedChildren }
+      );
+
       return { success: true };
     } catch (error: unknown) {
       const errorMessage =
@@ -321,6 +559,24 @@ Guidelines:
         status: "failed",
         error: errorMessage,
       });
+
+      // Emit failed progress
+      children.push({
+        id: `${args.threadId}_error`,
+        type: "error",
+        label: "Task failed",
+        status: "error",
+        details: errorMessage,
+      });
+
+      await emitProgress(
+        args.cloudThreadId,
+        args.threadId,
+        args.name,
+        args.task,
+        "failed",
+        { error: errorMessage, children }
+      );
 
       return { success: false, error: errorMessage };
     }

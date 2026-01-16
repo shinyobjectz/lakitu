@@ -201,7 +201,7 @@ async function callCloudLLM(
       Authorization: `Bearer ${jwt}`,
     },
     body: JSON.stringify({
-      path: "services.OpenRouter.internal.chatCompletion",
+      path: "internal.services.OpenRouter.internal.chatCompletion",
       args: {
         model: options.model || "google/gemini-3-flash-preview",
         messages,

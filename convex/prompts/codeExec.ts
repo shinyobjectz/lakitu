@@ -19,7 +19,9 @@ const ALL_KSA_NAMES = [
   // Influencer
   "influencer-search", "influencer-analytics",
   // Deliverables
-  "pdf", "email"
+  "pdf", "email",
+  // App services
+  "boards", "brandscan", "workspaces", "frames"
 ];
 
 /**
@@ -363,6 +365,134 @@ console.log('Authenticity score:', authenticity.score);
 
 // Get audience demographics
 const demographics = await getAudienceDemographics('username');
+\`\`\``,
+
+  // App service KSAs
+  boards: `### Boards KSA (\`./ksa/boards\`) - Create and manage workflow boards
+\`\`\`typescript
+import { listBoards, createBoard, getBoard, addCard, runCard, waitForCard, getCompletedCards, listTemplates, createBoardFromTemplate } from './ksa/boards';
+
+// List existing boards
+const boards = await listBoards();
+console.log('Boards:', boards.map(b => b.name));
+
+// Create a new workflow board with stages
+// Signature: createBoard(name: string, options?: { description?, stages?, workspaceMode? })
+const boardId = await createBoard('Content Pipeline', {
+  description: 'Automated content creation workflow',
+  stages: [
+    { name: 'Research', type: 'agent', skillIds: ['web', 'news'] },
+    { name: 'Draft', type: 'agent', skillIds: ['generate'] },
+    { name: 'Review', type: 'human' },
+    { name: 'Publish', type: 'agent', skillIds: ['publish'] }
+  ]
+});
+console.log('Created board:', boardId);
+
+// Add a card to the board
+const cardId = await addCard(boardId, {
+  title: 'Write blog post about AI',
+  description: 'Create a comprehensive blog post'
+});
+
+// Start automated execution of the card
+await runCard(cardId);
+
+// Wait for card to complete (with timeout)
+const result = await waitForCard(cardId, 300000); // 5 min timeout
+console.log('Card completed:', result);
+
+// Get all completed cards from a board
+const completed = await getCompletedCards(boardId);
+console.log('Completed cards:', completed.length);
+
+// List available templates
+const templates = await listTemplates();
+console.log('Templates:', templates.map(t => t.name));
+
+// Create board from a template
+// Signature: createBoardFromTemplate(templateId: string, name?: string)
+const newBoardId = await createBoardFromTemplate('template-id', 'My New Board');
+\`\`\``,
+
+  brandscan: `### Brand Scan KSA (\`./ksa/brandscan\`) - Brand intelligence scanning
+\`\`\`typescript
+import { startScan, getScanStatus, waitForScan, getBrandData, listBrands, getBrandByDomain } from './ksa/brandscan';
+
+// Start a brand scan by domain
+const scanId = await startScan('example.com');
+console.log('Scan started:', scanId);
+
+// Wait for scan to complete
+const result = await waitForScan(scanId, 120000); // 2 min timeout
+console.log('Scan complete:', result);
+
+// Get detailed brand data
+const brand = await getBrandData(result.brandId);
+console.log('Brand:', brand.name, brand.industry);
+
+// Find existing brand by domain
+const existing = await getBrandByDomain('competitor.com');
+if (existing) {
+  console.log('Found brand:', existing.name);
+}
+\`\`\``,
+
+  workspaces: `### Workspaces KSA (\`./ksa/workspaces\`) - Design workspace management
+\`\`\`typescript
+import { listWorkspaces, createWorkspace, getCanvas, saveCanvas, addCanvasElement, saveDesign } from './ksa/workspaces';
+
+// List workspaces
+const workspaces = await listWorkspaces();
+console.log('Workspaces:', workspaces.map(w => w.name));
+
+// Create a new workspace
+const workspaceId = await createWorkspace({ name: 'Campaign Assets' });
+
+// Add elements to canvas
+await addCanvasElement(workspaceId, {
+  type: 'image',
+  url: 'https://example.com/logo.png',
+  x: 100, y: 100, width: 200, height: 200
+});
+
+// Save a design
+await saveDesign(workspaceId, {
+  name: 'Hero Banner',
+  format: 'png',
+  width: 1200, height: 630
+});
+\`\`\``,
+
+  frames: `### Frames KSA (\`./ksa/frames\`) - Visual frame generation
+\`\`\`typescript
+import { createFrame, generateFrame, listFrames, getFrame, updateFrame, getTemplates } from './ksa/frames';
+
+// Generate a frame using AI
+const frame = await generateFrame({
+  prompt: 'Create a landing page hero section for a SaaS product',
+  style: 'modern',
+  colors: ['#3B82F6', '#1F2937']
+});
+console.log('Generated frame:', frame.id);
+
+// Get available templates
+const templates = await getTemplates();
+console.log('Templates:', templates.map(t => t.name));
+
+// Create frame from template
+const newFrame = await createFrame({
+  templateId: 'hero-section',
+  variables: {
+    headline: 'Build Better Products',
+    subheadline: 'AI-powered development tools'
+  }
+});
+
+// Update frame content
+await updateFrame(newFrame.id, {
+  html: '<div class="hero">Updated content</div>'
+});
 \`\`\``,
 };
 
