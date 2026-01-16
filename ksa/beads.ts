@@ -48,6 +48,7 @@ async function callLocalConvex<T = unknown>(
     body: JSON.stringify({
       path: convexPath,
       args,
+      format: "json",
     }),
   });
 
@@ -79,6 +80,7 @@ function fireLocalConvex(
     body: JSON.stringify({
       path: convexPath,
       args,
+      format: "json",
     }),
   }).catch(() => {
     // Fire and forget - ignore errors
