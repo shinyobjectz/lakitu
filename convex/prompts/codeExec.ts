@@ -371,79 +371,85 @@ const demographics = await getAudienceDemographics('username');
   // App service KSAs
   boards: `### Boards KSA (\`./ksa/boards\`) - Create and manage workflow boards
 
-**IMPORTANT: When creating boards, ALWAYS design appropriate stages based on the workflow purpose.**
-- Analyze what the board is for and create stages that match the workflow
-- Each stage needs: name, stageType ('agent' or 'human'), and optionally goals/skills
-- Don't just create an empty board - design the full workflow pipeline
+**IMPORTANT: When creating boards:**
+1. ALWAYS design appropriate stages based on the workflow purpose
+2. ALWAYS configure a trigger to define how cards are created
+3. ALWAYS save an artifact link after creating a board so the user can access it
 
 \`\`\`typescript
-import { listBoards, createBoard, getBoard, addCard, runCard, waitForCard, getCompletedCards, listTemplates, createBoardFromTemplate } from './ksa/boards';
+import { listBoards, createBoard, getBoard, addCard, runCard, waitForCard, getCompletedCards, listTemplates, createBoardFromTemplate, setTrigger } from './ksa/boards';
+import { saveArtifact } from './ksa/artifacts';
+
+// COMPLETE EXAMPLE: Create a board with stages AND trigger, then save artifact link
+const boardId = await createBoard('Brand Analysis Pipeline', {
+  description: 'Analyze brands and generate strategic reports',
+  stages: [
+    { name: 'Brand Scan', stageType: 'agent', goals: ['Scan brand website', 'Extract logos and colors'] },
+    { name: 'Social Analysis', stageType: 'agent', goals: ['Audit social presence', 'Analyze engagement'] },
+    { name: 'Report Generation', stageType: 'agent', goals: ['Create comprehensive report'] },
+    { name: 'Human Review', stageType: 'human' }
+  ],
+  trigger: {
+    name: 'Brand Analysis Trigger',
+    methods: { prompt: true, webform: true, webhook: false, mcp: false },
+    chat: {
+      images: { enabled: true, maxSize: '10MB' },
+      files: { enabled: true, maxSize: '25MB', types: ['pdf', 'png', 'jpg'] },
+      urls: { enabled: true, scrape: true },
+      systemPrompt: 'You are a brand analysis assistant. Help users analyze brands.',
+      placeholder: 'Enter a brand domain or describe what you want to analyze...',
+      startWithPlan: true,
+    },
+    form: { fields: [
+      { id: 'domain', label: 'Brand Domain', type: 'text', required: true, placeholder: 'example.com' },
+      { id: 'focus', label: 'Analysis Focus', type: 'select', required: false }
+    ] },
+  }
+});
+
+// ALWAYS save an artifact link so user can access the created board
+await saveArtifact({
+  name: 'Brand Analysis Pipeline Board',
+  type: 'link',
+  content: JSON.stringify({
+    type: 'board',
+    id: boardId,
+    url: \`/board/\${boardId}\`,
+    title: 'Brand Analysis Pipeline',
+    description: 'Click to open your new board'
+  })
+});
+console.log('Created board:', boardId);
+
+// You can also set/update trigger separately
+await setTrigger(boardId, {
+  name: 'Updated Trigger',
+  methods: { prompt: true, webform: false, webhook: true, mcp: false },
+  chat: {
+    images: { enabled: false, maxSize: '5MB' },
+    files: { enabled: false, maxSize: '10MB', types: [] },
+    urls: { enabled: true, scrape: true },
+    systemPrompt: 'Process incoming webhooks...',
+  },
+  form: { fields: [] },
+});
 
 // List existing boards
 const boards = await listBoards();
 console.log('Boards:', boards.map(b => b.name));
 
-// ALWAYS design proper stages when creating a board
-// Think about: What steps does this workflow need? Which are automated vs manual?
-// Signature: createBoard(name: string, options?: { description?, stages?, workspaceMode? })
-
-// Example 1: Content creation workflow
-const contentBoardId = await createBoard('Content Pipeline', {
-  description: 'Automated content creation workflow with human review',
-  stages: [
-    { name: 'Research', stageType: 'agent', goals: ['Find 5 relevant sources', 'Identify key points'] },
-    { name: 'Draft', stageType: 'agent', goals: ['Write first draft based on research'] },
-    { name: 'Review', stageType: 'human' }, // Human reviews draft
-    { name: 'Finalize', stageType: 'agent', goals: ['Apply reviewer feedback', 'Format for publication'] }
-  ]
-});
-
-// Example 2: Research workflow
-const researchBoardId = await createBoard('Market Research', {
-  description: 'Comprehensive market research pipeline',
-  stages: [
-    { name: 'Gather Data', stageType: 'agent', goals: ['Collect market data', 'Find competitor info'] },
-    { name: 'Analyze', stageType: 'agent', goals: ['Identify trends', 'Calculate market size'] },
-    { name: 'Report', stageType: 'agent', goals: ['Generate comprehensive report'] },
-    { name: 'Executive Review', stageType: 'human' } // Human approves final report
-  ]
-});
-
-// Example 3: Brand analysis workflow
-const brandBoardId = await createBoard('Brand Analysis', {
-  description: 'Analyze a brand and generate insights',
-  stages: [
-    { name: 'Brand Scan', stageType: 'agent', goals: ['Run brand intelligence scan'] },
-    { name: 'Social Audit', stageType: 'agent', goals: ['Analyze social media presence'] },
-    { name: 'Competitor Comparison', stageType: 'agent', goals: ['Compare with 3 competitors'] },
-    { name: 'Strategy Review', stageType: 'human' } // Human reviews strategy recommendations
-  ]
-});
-
 // Add a card to the board
-const cardId = await addCard(contentBoardId, 'task-001', 'Write blog post about AI', {
-  data: { topic: 'AI trends', depth: 'comprehensive' },
-  autoRun: false // Set true to start execution immediately
+const cardId = await addCard(boardId, 'task-001', 'Analyze Nike brand', {
+  data: { domain: 'nike.com', depth: 'thorough' },
+  autoRun: true
 });
-
-// Start automated execution of the card
-await runCard(cardId);
 
 // Wait for card to complete (with timeout)
 const result = await waitForCard(cardId, 300000); // 5 min timeout
 console.log('Card completed:', result);
 
-// Get all completed cards from a board
-const completed = await getCompletedCards(contentBoardId);
-console.log('Completed cards:', completed.length);
-
-// List available templates
-const templates = await listTemplates();
-console.log('Templates:', templates.map(t => t.name));
-
-// Create board from a template (alternative to designing stages manually)
 // Available templates: 'research-report', 'content-pipeline', 'data-analysis', 'competitor-research'
-const newBoardId = await createBoardFromTemplate('research-report', 'My Research Project');
+const templateBoardId = await createBoardFromTemplate('research-report', 'My Research Project');
 \`\`\``,
 
   brandscan: `### Brand Scan KSA (\`./ksa/brandscan\`) - Brand intelligence scanning

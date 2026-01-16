@@ -98,6 +98,55 @@ export interface StageConfig {
   deliverables?: Array<{ name: string; required?: boolean }>;
 }
 
+export interface TriggerConfig {
+  name: string;
+  methods: {
+    prompt: boolean;    // Chat/prompt input
+    webform: boolean;   // Web form submission
+    webhook: boolean;   // API webhook
+    mcp: boolean;       // MCP tool call
+    schedule?: boolean; // Scheduled runs
+    email?: boolean;    // Email trigger
+  };
+  chat: {
+    images: { enabled: boolean; maxSize: string };
+    files: { enabled: boolean; maxSize: string; types: string[] };
+    urls: { enabled: boolean; scrape: boolean };
+    placeholder?: string;
+    emptyStateMessage?: string;
+    systemPrompt: string;
+    startWithPlan?: boolean;
+    clarifyingQuestions?: {
+      beforeStart: boolean;
+      duringStages: boolean;
+    };
+  };
+  form: {
+    fields: Array<{
+      id: string;
+      label: string;
+      type: string;
+      required: boolean;
+      placeholder?: string;
+    }>;
+  };
+  schedule?: {
+    interval: string;  // 'daily', 'weekly', 'monthly'
+    time: string;      // '09:00'
+    timezone: string;  // 'America/New_York'
+  };
+  email?: {
+    prefix: string;
+    allowedDomains: string[];
+    subjectAsTitle: boolean;
+    includeAttachments: boolean;
+    autoReply: {
+      enabled: boolean;
+      message?: string;
+    };
+  };
+}
+
 // ============================================================================
 // Functions
 // ============================================================================
@@ -177,6 +226,7 @@ export async function createBoard(
     description?: string;
     template?: string;
     stages?: StageConfig[];
+    trigger?: TriggerConfig;
     workspaceMode?: "per_card" | "shared";
   }
 ): Promise<string> {
@@ -225,7 +275,42 @@ export async function createBoard(
     }
   }
 
+  // Set trigger if provided
+  if (options?.trigger) {
+    await setTrigger(boardId, options.trigger);
+  }
+
   return boardId;
+}
+
+/**
+ * Set the trigger configuration for a board.
+ * Triggers define how cards are created on the board.
+ *
+ * @param boardId - The board ID
+ * @param trigger - The trigger configuration
+ *
+ * @example
+ * // Set a chat-based trigger
+ * await setTrigger(boardId, {
+ *   name: 'Chat Trigger',
+ *   methods: { prompt: true, webform: false, webhook: false, mcp: false },
+ *   chat: {
+ *     images: { enabled: true, maxSize: '10MB' },
+ *     files: { enabled: true, maxSize: '25MB', types: ['pdf', 'docx'] },
+ *     urls: { enabled: true, scrape: true },
+ *     systemPrompt: 'You are analyzing brand data...',
+ *     startWithPlan: true,
+ *   },
+ *   form: { fields: [] },
+ * });
+ */
+export async function setTrigger(boardId: string, trigger: TriggerConfig): Promise<void> {
+  await callGateway(
+    "internal.features.kanban.boards.updateTriggerInternal",
+    { id: boardId, trigger },
+    "mutation"
+  );
 }
 
 /**
