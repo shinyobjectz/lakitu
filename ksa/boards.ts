@@ -90,12 +90,32 @@ export interface BoardExecutionResult {
   error?: string;
 }
 
+export interface StageGoal {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+export interface StageSkill {
+  id: string;
+  name: string;
+  icon: string;
+  config?: Record<string, unknown>;
+}
+
+export interface StageDeliverable {
+  id: string;
+  type: string;  // 'pdf', 'report', 'data', 'image', 'artifact', etc.
+  name: string;
+  description?: string;
+}
+
 export interface StageConfig {
   name: string;
   stageType: "agent" | "human";
-  goals?: string[];
-  skills?: string[];
-  deliverables?: Array<{ name: string; required?: boolean }>;
+  goals?: StageGoal[];
+  skills?: StageSkill[];
+  deliverables?: StageDeliverable[];
 }
 
 export interface TriggerConfig {
@@ -268,7 +288,9 @@ export async function createBoard(
           name: stage.name,
           order: i,
           stageType: stage.stageType,
-          agentPrompt: stage.goals?.join(". "),
+          goals: stage.goals,
+          skills: stage.skills,
+          deliverables: stage.deliverables,
         },
         "mutation"
       );

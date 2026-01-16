@@ -372,22 +372,85 @@ const demographics = await getAudienceDemographics('username');
   boards: `### Boards KSA (\`./ksa/boards\`) - Create and manage workflow boards
 
 **IMPORTANT: When creating boards:**
-1. ALWAYS design appropriate stages based on the workflow purpose
+1. ALWAYS design stages with FULL configuration: goals, skills, AND deliverables
 2. ALWAYS configure a trigger to define how cards are created
 3. ALWAYS save an artifact link after creating a board so the user can access it
+
+**Stage Configuration (REQUIRED for each stage):**
+- \`goals\`: Array of { id, text, done } - What the stage should accomplish
+- \`skills\`: Array of { id, name, icon } - Which KSAs/tools to use (for agent stages)
+- \`deliverables\`: Array of { id, type, name, description } - Expected outputs
 
 \`\`\`typescript
 import { listBoards, createBoard, getBoard, addCard, runCard, waitForCard, getCompletedCards, listTemplates, createBoardFromTemplate, setTrigger } from './ksa/boards';
 import { saveArtifact } from './ksa/artifacts';
 
-// COMPLETE EXAMPLE: Create a board with stages AND trigger, then save artifact link
+// COMPLETE EXAMPLE: Create a board with FULLY CONFIGURED stages
 const boardId = await createBoard('Brand Analysis Pipeline', {
   description: 'Analyze brands and generate strategic reports',
   stages: [
-    { name: 'Brand Scan', stageType: 'agent', goals: ['Scan brand website', 'Extract logos and colors'] },
-    { name: 'Social Analysis', stageType: 'agent', goals: ['Audit social presence', 'Analyze engagement'] },
-    { name: 'Report Generation', stageType: 'agent', goals: ['Create comprehensive report'] },
-    { name: 'Human Review', stageType: 'human' }
+    {
+      name: 'Brand Scan',
+      stageType: 'agent',
+      goals: [
+        { id: 'g1', text: 'Scan brand website and extract key information', done: false },
+        { id: 'g2', text: 'Extract logos, colors, and typography', done: false },
+        { id: 'g3', text: 'Identify products and services', done: false },
+      ],
+      skills: [
+        { id: 'brandscan', name: 'Brand Scanner', icon: 'mdi:magnify' },
+        { id: 'web', name: 'Web Research', icon: 'mdi:web' },
+      ],
+      deliverables: [
+        { id: 'd1', type: 'data', name: 'Brand Profile', description: 'Structured brand data' },
+        { id: 'd2', type: 'image', name: 'Logo Collection', description: 'Brand logos in various formats' },
+      ],
+    },
+    {
+      name: 'Social Analysis',
+      stageType: 'agent',
+      goals: [
+        { id: 'g1', text: 'Audit social media presence across platforms', done: false },
+        { id: 'g2', text: 'Analyze engagement metrics and trends', done: false },
+        { id: 'g3', text: 'Identify top performing content', done: false },
+      ],
+      skills: [
+        { id: 'social', name: 'Social Media', icon: 'mdi:account-group' },
+        { id: 'analytics', name: 'Analytics', icon: 'mdi:chart-line' },
+      ],
+      deliverables: [
+        { id: 'd1', type: 'data', name: 'Social Metrics', description: 'Engagement data by platform' },
+        { id: 'd2', type: 'report', name: 'Content Analysis', description: 'Top posts and themes' },
+      ],
+    },
+    {
+      name: 'Report Generation',
+      stageType: 'agent',
+      goals: [
+        { id: 'g1', text: 'Synthesize findings into comprehensive report', done: false },
+        { id: 'g2', text: 'Generate actionable recommendations', done: false },
+        { id: 'g3', text: 'Create executive summary', done: false },
+      ],
+      skills: [
+        { id: 'pdf', name: 'PDF Generator', icon: 'mdi:file-pdf-box' },
+        { id: 'writing', name: 'Content Writing', icon: 'mdi:pencil' },
+      ],
+      deliverables: [
+        { id: 'd1', type: 'pdf', name: 'Brand Report', description: 'Full analysis PDF' },
+        { id: 'd2', type: 'artifact', name: 'Recommendations', description: 'Strategic action items' },
+      ],
+    },
+    {
+      name: 'Human Review',
+      stageType: 'human',
+      goals: [
+        { id: 'g1', text: 'Review report accuracy and completeness', done: false },
+        { id: 'g2', text: 'Approve or request revisions', done: false },
+      ],
+      deliverables: [
+        { id: 'd1', type: 'approval', name: 'Sign-off', description: 'Final approval' },
+      ],
+    },
   ],
   trigger: {
     name: 'Brand Analysis Trigger',
@@ -420,19 +483,6 @@ await saveArtifact({
   })
 });
 console.log('Created board:', boardId);
-
-// You can also set/update trigger separately
-await setTrigger(boardId, {
-  name: 'Updated Trigger',
-  methods: { prompt: true, webform: false, webhook: true, mcp: false },
-  chat: {
-    images: { enabled: false, maxSize: '5MB' },
-    files: { enabled: false, maxSize: '10MB', types: [] },
-    urls: { enabled: true, scrape: true },
-    systemPrompt: 'Process incoming webhooks...',
-  },
-  form: { fields: [] },
-});
 
 // List existing boards
 const boards = await listBoards();
