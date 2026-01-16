@@ -1,21 +1,28 @@
 /**
- * Brand Scan KSA - Knowledge, Skills, and Abilities
+ * Brand Lookup KSA - Knowledge, Skills, and Abilities
  *
- * Initiate and monitor brand intelligence scans.
- * Scans gather styleguide data, website content, ads, and social media presence.
+ * Lightweight brand lookups for AI agents.
+ * Uses existing brand library data or fast API lookups.
+ *
+ * IMPORTANT: This KSA does NOT trigger full brand scans.
+ * Full scans involve web crawling and can take minutes.
+ * For agent tasks, use these lightweight lookups instead.
  *
  * @example
- * import { startScan, waitForScan, getBrandData } from './ksa/brandscan';
+ * import { lookupBrand, searchBrands, getBrandByDomain } from './ksa/brandscan';
  *
- * // Start a scan for a domain
- * const { scanId, brandId } = await startScan('anthropic.com');
+ * // Quick lookup - checks library first, then lightweight API
+ * const brand = await lookupBrand('anthropic.com');
+ * if (brand) {
+ *   console.log(brand.name, brand.industry);
+ * }
  *
- * // Wait for completion (can take several minutes)
- * const result = await waitForScan(scanId);
+ * // Search by name
+ * const results = await searchBrands('Nike');
+ * console.log(results); // [{ name, domain, icon }]
  *
- * // Get the brand data
- * const brand = await getBrandData(brandId);
- * console.log(brand.styleguide);
+ * // Get from library only (instant, no API calls)
+ * const existing = await getBrandByDomain('anthropic.com');
  */
 
 import { callGateway } from "./_shared/gateway";
@@ -24,30 +31,36 @@ import { callGateway } from "./_shared/gateway";
 // Types
 // ============================================================================
 
-export interface ScanStep {
-  id: string;
+/**
+ * Lightweight brand data returned by lookups.
+ * Contains basic firmographic info without full intelligence data.
+ */
+export interface BrandLite {
   name: string;
-  status: "pending" | "running" | "completed" | "failed";
-  startedAt?: number;
-  completedAt?: number;
-  error?: string;
-}
-
-export interface BrandScanResult {
-  scanId: string;
-  brandId: string;
-  status: "pending" | "running" | "completed" | "failed";
-  progress: number;
-  entityCounts?: {
-    products?: number;
-    assets?: number;
-    ads?: number;
-    socialPosts?: number;
+  domain: string;
+  logo?: string;
+  icon?: string;
+  description?: string;
+  tagline?: string;
+  industry?: string;
+  naicsCodes?: string[];
+  socialLinks?: {
+    twitter?: string;
+    linkedin?: string;
+    facebook?: string;
+    instagram?: string;
+    youtube?: string;
   };
-  steps?: ScanStep[];
-  error?: string;
+  headquarters?: string;
+  country?: string;
+  employeeCount?: string;
+  yearFounded?: number;
+  source: "library" | "api";
 }
 
+/**
+ * Full brand data from the library (only available for scanned brands).
+ */
 export interface BrandData {
   _id: string;
   domain: string;
@@ -88,135 +101,127 @@ export interface BrandData {
   _creationTime: number;
 }
 
-export interface ScanOptions {
-  maxAds?: number;
-  maxPosts?: number;
-  embedAssets?: boolean;
-  skipSteps?: Array<"intelligence" | "website" | "ads" | "social" | "embeddings">;
+/**
+ * Brand search result from name search.
+ */
+export interface BrandSearchResult {
+  name: string;
+  domain: string;
+  icon?: string;
 }
 
 // ============================================================================
-// Functions
+// Functions - Lightweight Lookups (Agent-Safe)
 // ============================================================================
 
 /**
- * Start a brand scan for a domain.
- * This initiates a multi-step workflow that gathers brand intelligence.
+ * Look up basic brand information - SAFE FOR AGENTS.
  *
- * @param domain - The domain to scan (e.g., 'anthropic.com')
- * @param options - Optional scan configuration
- * @returns Scan ID and brand ID
+ * This function:
+ * - Checks the brand library first (instant)
+ * - Falls back to lightweight API lookup (Brand.dev, TheCompanies)
+ * - NEVER triggers web crawling or full brand scans
+ * - Returns in seconds, not minutes
  *
- * @example
- * const { scanId, brandId } = await startScan('openai.com', {
- *   maxAds: 20,
- *   maxPosts: 50
- * });
- */
-export async function startScan(
-  domain: string,
-  options?: ScanOptions
-): Promise<{ scanId: string; brandId: string }> {
-  const response = await callGateway<{ scanId: string; brandId: string }>(
-    "features.brands.orchestration.scans.startFullScan",
-    {
-      domain,
-      maxAds: options?.maxAds,
-      maxPosts: options?.maxPosts,
-      embedAssets: options?.embedAssets,
-      skipSteps: options?.skipSteps,
-    },
-    "action"
-  );
-  return response;
-}
-
-/**
- * Get the current status of a brand scan.
- *
- * @param scanId - The scan ID
- * @returns Current scan status with progress and steps
+ * @param domain - The domain to look up (e.g., 'anthropic.com')
+ * @returns Brand data or null if not found
  *
  * @example
- * const status = await getScanStatus(scanId);
- * console.log(`Scan is ${status.progress}% complete`);
- * for (const step of status.steps) {
- *   console.log(`${step.name}: ${step.status}`);
+ * const brand = await lookupBrand('anthropic.com');
+ * if (brand) {
+ *   console.log(`${brand.name} - ${brand.industry}`);
+ *   console.log(`Founded: ${brand.yearFounded}`);
+ *   console.log(`Source: ${brand.source}`); // 'library' or 'api'
  * }
  */
-export async function getScanStatus(scanId: string): Promise<BrandScanResult> {
-  const response = await callGateway<{
-    _id: string;
-    brandId: string;
-    status: string;
-    progress: number;
-    entityCounts?: Record<string, number>;
-    steps?: ScanStep[];
-    error?: string;
-  }>(
-    "features.brands.orchestration.scans.getLatest",
-    { scanId },
-    "query"
-  );
-
-  return {
-    scanId: response._id || scanId,
-    brandId: response.brandId,
-    status: response.status as BrandScanResult["status"],
-    progress: response.progress || 0,
-    entityCounts: response.entityCounts,
-    steps: response.steps,
-    error: response.error,
-  };
-}
-
-/**
- * Wait for a brand scan to complete.
- * Polls the scan status until it completes, fails, or times out.
- *
- * @param scanId - The scan ID
- * @param timeoutMs - Maximum wait time in milliseconds (default: 10 minutes)
- * @returns Final scan result
- *
- * @example
- * // Wait up to 15 minutes
- * const result = await waitForScan(scanId, 900000);
- * if (result.status === 'completed') {
- *   console.log('Found', result.entityCounts?.products, 'products');
- * }
- */
-export async function waitForScan(
-  scanId: string,
-  timeoutMs = 600000
-): Promise<BrandScanResult> {
-  const startTime = Date.now();
-  const pollInterval = 5000; // 5 seconds
-
-  while (Date.now() - startTime < timeoutMs) {
-    const status = await getScanStatus(scanId);
-
-    if (status.status === "completed" || status.status === "failed") {
-      return status;
-    }
-
-    // Wait before next poll
-    await new Promise((resolve) => setTimeout(resolve, pollInterval));
+export async function lookupBrand(domain: string): Promise<BrandLite | null> {
+  try {
+    const response = await callGateway<BrandLite | null>(
+      "features.brands.agentBrandLookup.lookupBrand",
+      { domain },
+      "action"
+    );
+    return response;
+  } catch {
+    return null;
   }
-
-  // Timeout reached
-  const finalStatus = await getScanStatus(scanId);
-  return {
-    ...finalStatus,
-    status: "failed",
-    error: `Timeout after ${timeoutMs}ms - scan still ${finalStatus.status}`,
-  };
 }
 
 /**
- * Get brand data after a completed scan.
+ * Search for brands by name - SAFE FOR AGENTS.
+ *
+ * Returns a list of matching brands with basic info.
+ * Use this when you have a company name but not a domain.
+ *
+ * @param query - The brand name to search for
+ * @param limit - Maximum results (default: 5)
+ * @returns Array of matching brands
+ *
+ * @example
+ * const results = await searchBrands('Nike');
+ * for (const r of results) {
+ *   console.log(`${r.name} - ${r.domain}`);
+ * }
+ */
+export async function searchBrands(
+  query: string,
+  limit = 5
+): Promise<BrandSearchResult[]> {
+  try {
+    const response = await callGateway<BrandSearchResult[]>(
+      "features.brands.agentBrandLookup.searchBrands",
+      { query, limit },
+      "action"
+    );
+    return response;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get brand from library only - SAFE FOR AGENTS.
+ *
+ * Only returns brands that exist in the library.
+ * Returns null if brand hasn't been scanned yet.
+ * Use this when you specifically need library data.
+ *
+ * @param domain - The domain to look up
+ * @returns Brand data or null if not in library
+ *
+ * @example
+ * const brand = await getBrandFromLibrary('anthropic.com');
+ * if (brand) {
+ *   console.log('Found in library:', brand.name);
+ * } else {
+ *   console.log('Brand not yet scanned');
+ * }
+ */
+export async function getBrandFromLibrary(domain: string): Promise<BrandLite | null> {
+  try {
+    const response = await callGateway<BrandLite | null>(
+      "features.brands.agentBrandLookup.getBrandFromLibrary",
+      { domain },
+      "action"
+    );
+    return response;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================================
+// Functions - Library Reads (Read-Only)
+// ============================================================================
+
+/**
+ * Get full brand data from library - READ ONLY.
+ *
+ * Returns complete brand data including styleguide, products, and ads.
+ * Only works for brands that have been scanned and added to the library.
  *
  * @param brandId - The brand ID
- * @returns Full brand data including styleguide, products, and ads
+ * @returns Full brand data
  *
  * @example
  * const brand = await getBrandData(brandId);
@@ -234,7 +239,9 @@ export async function getBrandData(brandId: string): Promise<BrandData> {
 }
 
 /**
- * Get brand intelligence summary (lighter weight than full data).
+ * Get brand intelligence summary - READ ONLY.
+ *
+ * Lighter weight than full data, returns counts.
  *
  * @param brandId - The brand ID
  * @returns Summary of brand intelligence
@@ -269,7 +276,7 @@ export async function getBrandSummary(brandId: string): Promise<{
 }
 
 /**
- * List all brands.
+ * List all brands in the library - READ ONLY.
  *
  * @returns Array of brands
  *
@@ -289,10 +296,10 @@ export async function listBrands(): Promise<BrandData[]> {
 }
 
 /**
- * Get brand by domain.
+ * Get brand by domain from library - READ ONLY.
  *
  * @param domain - The domain to look up
- * @returns Brand data or null if not found
+ * @returns Brand data or null if not in library
  *
  * @example
  * const brand = await getBrandByDomain('anthropic.com');
@@ -311,40 +318,4 @@ export async function getBrandByDomain(domain: string): Promise<BrandData | null
   } catch {
     return null;
   }
-}
-
-/**
- * List recent scans.
- *
- * @param brandId - Optional brand ID to filter by
- * @returns Array of recent scans
- *
- * @example
- * const scans = await listScans();
- * for (const s of scans) {
- *   console.log(`Scan ${s.scanId}: ${s.status} (${s.progress}%)`);
- * }
- */
-export async function listScans(brandId?: string): Promise<BrandScanResult[]> {
-  const response = await callGateway<Array<{
-    _id: string;
-    brandId: string;
-    status: string;
-    progress: number;
-    entityCounts?: Record<string, number>;
-    steps?: ScanStep[];
-  }>>(
-    "features.brands.orchestration.scans.list",
-    { brandId },
-    "query"
-  );
-
-  return response.map((s) => ({
-    scanId: s._id,
-    brandId: s.brandId,
-    status: s.status as BrandScanResult["status"],
-    progress: s.progress || 0,
-    entityCounts: s.entityCounts,
-    steps: s.steps,
-  }));
 }
