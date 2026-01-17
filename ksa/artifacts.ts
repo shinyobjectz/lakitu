@@ -23,6 +23,8 @@
  * const artifacts = await listArtifacts();
  */
 
+import { callGateway, THREAD_ID, CARD_ID } from "./_shared/gateway";
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -68,15 +70,15 @@ export interface ListResult {
 }
 
 // ============================================================================
-// Gateway Config (set by runtime)
+// Legacy Gateway Config (kept for backwards compatibility)
 // ============================================================================
 
 let gatewayConfig: { convexUrl: string; jwt: string; cardId?: string } | null =
   null;
 
 /**
- * Set the gateway config for cloud operations.
- * Called by the runtime when starting a session.
+ * @deprecated Gateway config is now read from env vars (GATEWAY_URL, SANDBOX_JWT)
+ * This function is kept for backwards compatibility but does nothing.
  */
 export function setGatewayConfig(config: {
   convexUrl: string;
@@ -84,52 +86,6 @@ export function setGatewayConfig(config: {
   cardId?: string;
 }) {
   gatewayConfig = config;
-}
-
-// ============================================================================
-// Internal: Cloud Communication
-// ============================================================================
-
-async function callCloud(
-  servicePath: string,
-  args: Record<string, unknown>,
-  type: "query" | "action" | "mutation" = "query"
-): Promise<any> {
-  const convexUrl = gatewayConfig?.convexUrl || process.env.CONVEX_URL;
-  const jwt = gatewayConfig?.jwt || process.env.SANDBOX_JWT;
-
-  if (!convexUrl || !jwt) {
-    console.log("[artifacts] Gateway not configured");
-    return { error: "Gateway not configured" };
-  }
-
-  try {
-    const response = await fetch(`${convexUrl}/agent/call`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${jwt}`,
-      },
-      body: JSON.stringify({ path: servicePath, type, args }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error(`[artifacts] Cloud call failed: ${error}`);
-      return { error };
-    }
-
-    const result = await response.json();
-    if (!result.ok) {
-      console.error(`[artifacts] Cloud error: ${result.error}`);
-      return { error: result.error };
-    }
-
-    return result.data;
-  } catch (error) {
-    console.error(`[artifacts] Cloud exception: ${error}`);
-    return { error: error instanceof Error ? error.message : String(error) };
-  }
 }
 
 // ============================================================================
@@ -179,15 +135,48 @@ export async function saveArtifact(
   }
 
   // Check for thread-based or card-based context
-  const threadId = process.env.THREAD_ID;
-  const cardId = gatewayConfig?.cardId || process.env.CARD_ID;
+  const threadId = THREAD_ID;
+  const cardId = gatewayConfig?.cardId || CARD_ID;
 
   // Thread artifacts (agent chat threads)
   if (threadId) {
-    const result = await callCloud(
-      "agent.workflows.crudThreads.saveThreadArtifact",
+    try {
+      const artifactId = await callGateway<string>(
+        "internal.agent.workflows.crudThreads.saveThreadArtifact",
+        {
+          threadId,
+          artifact: {
+            name: params.name,
+            type: params.type,
+            content: params.content,
+            metadata: params.metadata,
+          },
+        },
+        "mutation"
+      );
+
+      console.log(`[artifacts] Saved thread artifact: ${params.name}`);
+      return {
+        success: true,
+        id: artifactId,
+        name: params.name,
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return { success: false, error: msg };
+    }
+  }
+
+  // Card artifacts (kanban workflows)
+  if (!cardId) {
+    return { success: false, error: "No CARD_ID or THREAD_ID available" };
+  }
+
+  try {
+    const result = await callGateway<{ id: string }>(
+      "features.kanban.artifacts.saveArtifactWithBackup",
       {
-        threadId,
+        cardId,
         artifact: {
           name: params.name,
           type: params.type,
@@ -195,50 +184,19 @@ export async function saveArtifact(
           metadata: params.metadata,
         },
       },
-      "mutation"
+      "action"
     );
 
-    if (result.error) {
-      return { success: false, error: result.error };
-    }
-
-    console.log(`[artifacts] Saved thread artifact: ${params.name}`);
+    console.log(`[artifacts] Saved artifact: ${params.name}`);
     return {
       success: true,
-      id: result,
+      id: result?.id,
       name: params.name,
     };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: msg };
   }
-
-  // Card artifacts (kanban workflows)
-  if (!cardId) {
-    return { success: false, error: "No cardId or threadId available" };
-  }
-
-  const result = await callCloud(
-    "features.kanban.artifacts.saveArtifactWithBackup",
-    {
-      cardId,
-      artifact: {
-        name: params.name,
-        type: params.type,
-        content: params.content,
-        metadata: params.metadata,
-      },
-    },
-    "action"
-  );
-
-  if (result.error) {
-    return { success: false, error: result.error };
-  }
-
-  console.log(`[artifacts] Saved artifact: ${params.name}`);
-  return {
-    success: true,
-    id: result,
-    name: params.name,
-  };
 }
 
 // ============================================================================
@@ -260,29 +218,30 @@ export async function saveArtifact(
  * }
  */
 export async function readArtifact(artifactId: string): Promise<ReadResult> {
-  const result = await callCloud(
-    "features.kanban.artifacts.getArtifact",
-    { artifactId },
-    "query"
-  );
+  try {
+    const result = await callGateway<any>(
+      "features.kanban.artifacts.getArtifact",
+      { artifactId },
+      "query"
+    );
 
-  if (result.error) {
-    return { success: false, error: result.error };
+    if (!result) {
+      return { success: false, error: `Artifact not found: ${artifactId}` };
+    }
+
+    console.log(`[artifacts] Read artifact: ${result.name}`);
+    return {
+      success: true,
+      name: result.name,
+      type: result.type,
+      content: result.content,
+      createdAt: result.createdAt,
+      metadata: result.metadata,
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: msg };
   }
-
-  if (!result) {
-    return { success: false, error: `Artifact not found: ${artifactId}` };
-  }
-
-  console.log(`[artifacts] Read artifact: ${result.name}`);
-  return {
-    success: true,
-    name: result.name,
-    type: result.type,
-    content: result.content,
-    createdAt: result.createdAt,
-    metadata: result.metadata,
-  };
 }
 
 /**
@@ -301,62 +260,64 @@ export async function readArtifact(artifactId: string): Promise<ReadResult> {
  */
 export async function listArtifacts(): Promise<ListResult> {
   // Check for thread-based or card-based context
-  const threadId = process.env.THREAD_ID;
-  const cardId = gatewayConfig?.cardId || process.env.CARD_ID;
+  const threadId = THREAD_ID;
+  const cardId = gatewayConfig?.cardId || CARD_ID;
 
   // Thread artifacts
   if (threadId) {
-    const result = await callCloud(
-      "internal.agent.workflows.crudThreads.listThreadArtifactsInternal",
-      { threadId },
+    try {
+      const result = await callGateway<any[]>(
+        "internal.agent.workflows.crudThreads.listThreadArtifactsInternal",
+        { threadId },
+        "query"
+      );
+
+      const artifacts = Array.isArray(result) ? result : [];
+      console.log(`[artifacts] Listed ${artifacts.length} thread artifacts`);
+
+      return {
+        success: true,
+        artifacts: artifacts.map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          type: a.type,
+          createdAt: a.createdAt,
+        })),
+        count: artifacts.length,
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return { success: false, error: msg, artifacts: [], count: 0 };
+    }
+  }
+
+  // Card artifacts
+  if (!cardId) {
+    return { success: false, error: "No CARD_ID or THREAD_ID available", artifacts: [], count: 0 };
+  }
+
+  try {
+    const result = await callGateway<any[]>(
+      "features.kanban.artifacts.listCardArtifacts",
+      { cardId },
       "query"
     );
 
-    if (result.error) {
-      return { success: false, error: result.error, artifacts: [], count: 0 };
-    }
-
     const artifacts = Array.isArray(result) ? result : [];
-    console.log(`[artifacts] Listed ${artifacts.length} thread artifacts`);
+    console.log(`[artifacts] Listed ${artifacts.length} artifacts`);
 
     return {
       success: true,
       artifacts: artifacts.map((a: any) => ({
-        id: a.id,
+        id: a._id,
         name: a.name,
         type: a.type,
         createdAt: a.createdAt,
       })),
       count: artifacts.length,
     };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: msg, artifacts: [], count: 0 };
   }
-
-  // Card artifacts
-  if (!cardId) {
-    return { success: false, error: "No cardId or threadId available", artifacts: [], count: 0 };
-  }
-
-  const result = await callCloud(
-    "features.kanban.artifacts.listCardArtifacts",
-    { cardId },
-    "query"
-  );
-
-  if (result.error) {
-    return { success: false, error: result.error, artifacts: [], count: 0 };
-  }
-
-  const artifacts = Array.isArray(result) ? result : [];
-  console.log(`[artifacts] Listed ${artifacts.length} artifacts`);
-
-  return {
-    success: true,
-    artifacts: artifacts.map((a: any) => ({
-      id: a._id,
-      name: a.name,
-      type: a.type,
-      createdAt: a.createdAt,
-    })),
-    count: artifacts.length,
-  };
 }

@@ -721,6 +721,7 @@ export const startCodeExecThread = action({
     const ctxObj = args.context as {
       gatewayConfig?: { convexUrl: string; jwt: string };
       cardId?: string;
+      cloudThreadId?: string; // Cloud thread ID for artifact uploads (different from sandbox-local threadId)
       model?: string;
       sessionId?: string; // For real-time log forwarding
       allowedKSAs?: string[]; // KSAs allowed for this task
@@ -774,6 +775,7 @@ export const startCodeExecThread = action({
       threadId,
       maxSteps: 10,
       cardId: ctxObj.cardId,
+      cloudThreadId: ctxObj.cloudThreadId, // Cloud thread ID for artifact uploads
       model: ctxObj.model,
       sessionId: ctxObj.sessionId, // Pass for real-time cloud log forwarding
     });

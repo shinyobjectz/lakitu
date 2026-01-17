@@ -281,6 +281,7 @@ export async function runCodeExecLoop(
     maxSteps?: number;
     threadId?: string;
     cardId?: string;
+    cloudThreadId?: string; // Cloud thread ID for artifact uploads
     model?: string;
     sessionId?: string; // For real-time log forwarding to cloud
   } = {}
@@ -291,6 +292,7 @@ export async function runCodeExecLoop(
   const maxSteps = options.maxSteps || 10;
   const threadId = options.threadId || `codeexec_${Date.now()}`;
   const cardId = options.cardId;
+  const cloudThreadId = options.cloudThreadId; // Cloud thread ID for artifact uploads
   const model = options.model;
 
   // Set up cloud forwarding for real-time chain of thought
@@ -440,6 +442,8 @@ export async function runCodeExecLoop(
             GATEWAY_URL: gatewayConfig.convexUrl,
             SANDBOX_JWT: gatewayConfig.jwt,
             ...(cardId && { CARD_ID: cardId }),
+            // Pass cloud thread ID for artifact uploads (NOT the sandbox-local threadId)
+            ...(cloudThreadId && { THREAD_ID: cloudThreadId }),
           },
         });
 

@@ -10,9 +10,38 @@
  * - fireAndForget: Non-blocking call (don't wait for response)
  */
 
+import { readFileSync, existsSync } from "fs";
+
+// Load env vars from /home/user/.env if present (set by pool claim)
+function loadEnvFile(): Record<string, string> {
+  const envPath = "/home/user/.env";
+  if (!existsSync(envPath)) return {};
+
+  try {
+    const content = readFileSync(envPath, "utf-8");
+    const envVars: Record<string, string> = {};
+    for (const line of content.split("\n")) {
+      const match = line.match(/^export\s+(\w+)="([^"]*)"/);
+      if (match) {
+        envVars[match[1]] = match[2];
+      }
+    }
+    return envVars;
+  } catch {
+    return {};
+  }
+}
+
+const envFile = loadEnvFile();
+
 // Gateway config from environment (set by sandbox runtime)
-const GATEWAY_URL = process.env.GATEWAY_URL || "http://localhost:3210";
-const JWT = process.env.SANDBOX_JWT || "";
+// Check both process.env and .env file (for pooled sandboxes)
+const GATEWAY_URL = process.env.GATEWAY_URL || envFile.GATEWAY_URL || "http://localhost:3210";
+const JWT = process.env.SANDBOX_JWT || envFile.SANDBOX_JWT || "";
+
+// Export THREAD_ID and CARD_ID for other KSAs to use
+export const THREAD_ID = process.env.THREAD_ID || envFile.THREAD_ID;
+export const CARD_ID = process.env.CARD_ID || envFile.CARD_ID;
 
 /**
  * Call the cloud gateway to invoke a Convex service.

@@ -30,6 +30,7 @@ export const execute = internalAction({
       GATEWAY_URL: v.optional(v.string()),
       SANDBOX_JWT: v.optional(v.string()),
       CARD_ID: v.optional(v.string()),
+      THREAD_ID: v.optional(v.string()),
     })),
   },
   handler: async (_ctx, args): Promise<{
@@ -73,6 +74,7 @@ export const execute = internalAction({
           ...(args.env?.GATEWAY_URL && { GATEWAY_URL: args.env.GATEWAY_URL }),
           ...(args.env?.SANDBOX_JWT && { SANDBOX_JWT: args.env.SANDBOX_JWT }),
           ...(args.env?.CARD_ID && { CARD_ID: args.env.CARD_ID }),
+          ...(args.env?.THREAD_ID && { THREAD_ID: args.env.THREAD_ID }),
         },
         maxBuffer: MAX_OUTPUT_LENGTH * 2,
       });
