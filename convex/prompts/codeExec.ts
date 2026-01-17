@@ -10,14 +10,8 @@ const CORE_KSAS = ["file", "context", "artifacts", "beads"];
 const ALL_KSA_NAMES = [
   // Core
   "file", "context", "artifacts", "beads",
-  // General research
-  "web", "news", "social", "companies", "browser",
-  // Platform-specific social
-  "instagram", "tiktok", "youtube", "linkedin", "twitter",
-  // Ads
-  "meta-ads", "linkedin-ads", "google-ads", "tiktok-ads",
-  // Influencer
-  "influencer-search", "influencer-analytics",
+  // Research
+  "web", "news", "social", "ads", "companies", "browser",
   // Deliverables
   "pdf", "email",
   // App services
@@ -170,6 +164,31 @@ const twitter = await twitterProfile('elonmusk');
 const posts = await instagramPosts('instagram', 10);
 \`\`\``,
 
+  ads: `### Ads KSA (\`./ksa/ads\`) - **USE THIS for Facebook/Instagram/Meta ads and Google ads**
+\`\`\`typescript
+import { searchMetaAds, searchGoogleAds, searchAllAds, searchMetaCompanies, getMetaAdsByPageId } from './ksa/ads';
+
+// Search Meta Ad Library by brand name (RECOMMENDED)
+const result = await searchMetaAds('Liquid Death');
+console.log(\`Found \${result.ads.length} Meta ads for \${result.company?.name}\`);
+for (const ad of result.ads.slice(0, 5)) {
+  console.log(\`- \${ad.body?.substring(0, 100)}...\`);
+  console.log(\`  Platform: \${ad.platform}, Status: \${ad.status}\`);
+}
+
+// Search Google Ads Transparency by domain
+const googleResult = await searchGoogleAds('liquiddeath.com');
+console.log(\`Found \${googleResult.ads.length} Google ads\`);
+
+// Search both platforms at once
+const { meta, google } = await searchAllAds('Nike', 'nike.com');
+console.log(\`Meta: \${meta.ads.length}, Google: \${google.ads.length}\`);
+
+// For advanced use: search companies first, then get ads by Page ID
+const companies = await searchMetaCompanies('Apple');
+const appleAds = await getMetaAdsByPageId(companies[0].pageId, { maxAds: 20 });
+\`\`\``,
+
   companies: `### Companies KSA (\`./ksa/companies\`)
 \`\`\`typescript
 import { enrichDomain, searchCompanies, getTechStack } from './ksa/companies';
@@ -202,304 +221,128 @@ await sendWithAttachment(
 );
 \`\`\``,
 
-  // Platform-specific organic social KSAs
-  instagram: `### Instagram KSA (\`./ksa/instagram\`) - Organic content research
-\`\`\`typescript
-import { getProfile, getPosts, getReels, searchHashtags, analyzeEngagement } from './ksa/instagram';
-
-// Get creator profile
-const profile = await getProfile('username');
-console.log(profile.followers, profile.engagement);
-
-// Get recent posts
-const posts = await getPosts('username', 10);
-posts.forEach(post => console.log(post.likes, post.caption));
-
-// Search hashtags for content
-const tagged = await searchHashtags('marketing', 20);
-\`\`\``,
-
-  tiktok: `### TikTok KSA (\`./ksa/tiktok\`) - Viral content analysis
-\`\`\`typescript
-import { getCreator, getVideos, getTrending, searchSounds, analyzeViralContent } from './ksa/tiktok';
-
-// Get creator info
-const creator = await getCreator('username');
-console.log(creator.followers, creator.likes);
-
-// Get their videos
-const videos = await getVideos('username', 15);
-
-// Find trending content
-const trending = await getTrending('category');
-\`\`\``,
-
-  youtube: `### YouTube KSA (\`./ksa/youtube\`) - Channel and video analysis
-\`\`\`typescript
-import { getChannel, getVideos, getShorts, searchVideos, analyzePerformance } from './ksa/youtube';
-
-// Get channel info
-const channel = await getChannel('channelId');
-console.log(channel.subscribers, channel.viewCount);
-
-// Get recent videos
-const videos = await getVideos('channelId', 10);
-
-// Search for videos
-const results = await searchVideos('AI tutorials', 20);
-\`\`\``,
-
-  linkedin: `### LinkedIn KSA (\`./ksa/linkedin\`) - B2B professional research
-\`\`\`typescript
-import { getProfile, getCompanyPage, getPosts, searchPeople, analyzeNetwork } from './ksa/linkedin';
-
-// Get professional profile
-const profile = await getProfile('linkedin-url');
-console.log(profile.headline, profile.connections);
-
-// Get company page
-const company = await getCompanyPage('company-url');
-
-// Search for professionals
-const people = await searchPeople({ title: 'VP Marketing', industry: 'SaaS' });
-\`\`\``,
-
-  twitter: `### Twitter KSA (\`./ksa/twitter\`) - Real-time social listening
-\`\`\`typescript
-import { getProfile, getTweets, getThreads, searchTweets, analyzeSentiment } from './ksa/twitter';
-
-// Get profile
-const profile = await getProfile('username');
-console.log(profile.followers, profile.verified);
-
-// Get recent tweets
-const tweets = await getTweets('username', 20);
-
-// Search tweets
-const results = await searchTweets('brand mention', 50);
-\`\`\``,
-
-  // Ads KSAs
-  "meta-ads": `### Meta Ads KSA (\`./ksa/meta-ads\`) - Facebook/Instagram advertising
-\`\`\`typescript
-import { searchAds, getAdLibrary, analyzeCreatives, getCompetitorAds, estimateSpend } from './ksa/meta-ads';
-
-// Search Meta Ad Library
-const ads = await searchAds({ query: 'competitor', platforms: ['facebook', 'instagram'] });
-
-// Get competitor ads
-const competitorAds = await getCompetitorAds('competitor-page-id');
-
-// Analyze ad creatives
-const analysis = await analyzeCreatives(ads.slice(0, 10));
-\`\`\``,
-
-  "linkedin-ads": `### LinkedIn Ads KSA (\`./ksa/linkedin-ads\`) - B2B advertising
-\`\`\`typescript
-import { searchSponsored, analyzeTargeting, getCompanyAds, benchmarkPerformance } from './ksa/linkedin-ads';
-
-// Search sponsored content
-const sponsored = await searchSponsored({ industry: 'Technology', region: 'US' });
-
-// Get company's ads
-const companyAds = await getCompanyAds('company-id');
-
-// Benchmark against industry
-const benchmark = await benchmarkPerformance(companyAds);
-\`\`\``,
-
-  "google-ads": `### Google Ads KSA (\`./ksa/google-ads\`) - Search and display advertising
-\`\`\`typescript
-import { searchKeywords, getDisplayAds, analyzeYouTubeAds, getCompetitorKeywords, estimateCPC } from './ksa/google-ads';
-
-// Research keywords
-const keywords = await searchKeywords({ seed: 'crm software', limit: 50 });
-
-// Get competitor keywords
-const competitorKeywords = await getCompetitorKeywords('competitor.com');
-
-// Estimate CPC
-const cpc = await estimateCPC(['crm', 'project management', 'sales automation']);
-\`\`\``,
-
-  "tiktok-ads": `### TikTok Ads KSA (\`./ksa/tiktok-ads\`) - Short-form video advertising
-\`\`\`typescript
-import { searchAds, getSparkAds, analyzeCreatives, getTrendingAds, benchmarkCPM } from './ksa/tiktok-ads';
-
-// Search TikTok ads
-const ads = await searchAds({ category: 'ecommerce', audience: 'genz' });
-
-// Get Spark Ads (boosted organic)
-const sparkAds = await getSparkAds({ brand: 'brand-name' });
-
-// Get trending ad formats
-const trending = await getTrendingAds();
-\`\`\``,
-
-  // Influencer KSAs
-  "influencer-search": `### Influencer Search KSA (\`./ksa/influencer-search\`) - Creator discovery
-\`\`\`typescript
-import { searchByNiche, searchByHashtag, searchByLocation, filterByFollowers, rankByEngagement } from './ksa/influencer-search';
-
-// Find influencers by niche
-const fitness = await searchByNiche('fitness', { platforms: ['instagram', 'tiktok'] });
-
-// Filter by follower count
-const micro = await filterByFollowers(fitness, { min: 10000, max: 100000 });
-
-// Rank by engagement rate
-const ranked = await rankByEngagement(micro);
-console.log(ranked.slice(0, 10));
-\`\`\``,
-
-  "influencer-analytics": `### Influencer Analytics KSA (\`./ksa/influencer-analytics\`) - Creator performance
-\`\`\`typescript
-import { calculateEngagement, analyzeGrowth, estimateReach, checkAuthenticity, getAudienceDemographics } from './ksa/influencer-analytics';
-
-// Calculate engagement rate
-const engagement = await calculateEngagement('username', 'instagram');
-console.log('Engagement:', engagement.rate);
-
-// Check for fake followers
-const authenticity = await checkAuthenticity('username');
-console.log('Authenticity score:', authenticity.score);
-
-// Get audience demographics
-const demographics = await getAudienceDemographics('username');
-\`\`\``,
-
   // App service KSAs
-  boards: `### Boards KSA (\`./ksa/boards\`) - Create and manage workflow boards
+  boards: `### Boards KSA - Create workflow boards using YAML DSL
 
-**IMPORTANT: When creating boards:**
-1. ALWAYS design stages with FULL configuration: goals, skills, AND deliverables
-2. ALWAYS configure a trigger to define how cards are created
-3. ALWAYS save an artifact link after creating a board so the user can access it
-
-**Stage Configuration (REQUIRED for each stage):**
-- \`goals\`: Array of { id, text, done } - What the stage should accomplish
-- \`skills\`: Array of { id, name, icon } - Which KSAs/tools to use (for agent stages)
-- \`deliverables\`: Array of { id, type, name, description } - Expected outputs
+**PREFERRED: Use boardDSL for creating boards** - Write a YAML definition file, then create the board atomically.
 
 \`\`\`typescript
-import { listBoards, createBoard, getBoard, addCard, runCard, waitForCard, getCompletedCards, listTemplates, createBoardFromTemplate, setTrigger } from './ksa/boards';
+import { createBoardFromYAML, validateBoardYAML } from './ksa/boardDSL';
 import { saveArtifact } from './ksa/artifacts';
 
-// COMPLETE EXAMPLE: Create a board with FULLY CONFIGURED stages
-const boardId = await createBoard('Brand Analysis Pipeline', {
-  description: 'Analyze brands and generate strategic reports',
-  stages: [
-    {
-      name: 'Brand Scan',
-      stageType: 'agent',
-      goals: [
-        { id: 'g1', text: 'Scan brand website and extract key information', done: false },
-        { id: 'g2', text: 'Extract logos, colors, and typography', done: false },
-        { id: 'g3', text: 'Identify products and services', done: false },
-      ],
-      skills: [
-        { id: 'brandscan', name: 'Brand Scanner', icon: 'mdi:magnify' },
-        { id: 'web', name: 'Web Research', icon: 'mdi:web' },
-      ],
-      deliverables: [
-        { id: 'd1', type: 'data', name: 'Brand Profile', description: 'Structured brand data' },
-        { id: 'd2', type: 'image', name: 'Logo Collection', description: 'Brand logos in various formats' },
-      ],
-    },
-    {
-      name: 'Social Analysis',
-      stageType: 'agent',
-      goals: [
-        { id: 'g1', text: 'Audit social media presence across platforms', done: false },
-        { id: 'g2', text: 'Analyze engagement metrics and trends', done: false },
-        { id: 'g3', text: 'Identify top performing content', done: false },
-      ],
-      skills: [
-        { id: 'social', name: 'Social Media', icon: 'mdi:account-group' },
-        { id: 'analytics', name: 'Analytics', icon: 'mdi:chart-line' },
-      ],
-      deliverables: [
-        { id: 'd1', type: 'data', name: 'Social Metrics', description: 'Engagement data by platform' },
-        { id: 'd2', type: 'report', name: 'Content Analysis', description: 'Top posts and themes' },
-      ],
-    },
-    {
-      name: 'Report Generation',
-      stageType: 'agent',
-      goals: [
-        { id: 'g1', text: 'Synthesize findings into comprehensive report', done: false },
-        { id: 'g2', text: 'Generate actionable recommendations', done: false },
-        { id: 'g3', text: 'Create executive summary', done: false },
-      ],
-      skills: [
-        { id: 'pdf', name: 'PDF Generator', icon: 'mdi:file-pdf-box' },
-        { id: 'writing', name: 'Content Writing', icon: 'mdi:pencil' },
-      ],
-      deliverables: [
-        { id: 'd1', type: 'pdf', name: 'Brand Report', description: 'Full analysis PDF' },
-        { id: 'd2', type: 'artifact', name: 'Recommendations', description: 'Strategic action items' },
-      ],
-    },
-    {
-      name: 'Human Review',
-      stageType: 'human',
-      goals: [
-        { id: 'g1', text: 'Review report accuracy and completeness', done: false },
-        { id: 'g2', text: 'Approve or request revisions', done: false },
-      ],
-      deliverables: [
-        { id: 'd1', type: 'approval', name: 'Sign-off', description: 'Final approval' },
-      ],
-    },
-  ],
-  trigger: {
-    name: 'Brand Analysis Trigger',
-    methods: { prompt: true, webform: true, webhook: false, mcp: false },
-    chat: {
-      images: { enabled: true, maxSize: '10MB' },
-      files: { enabled: true, maxSize: '25MB', types: ['pdf', 'png', 'jpg'] },
-      urls: { enabled: true, scrape: true },
-      systemPrompt: 'You are a brand analysis assistant. Help users analyze brands.',
-      placeholder: 'Enter a brand domain or describe what you want to analyze...',
-      startWithPlan: true,
-    },
-    form: { fields: [
-      { id: 'domain', label: 'Brand Domain', type: 'text', required: true, placeholder: 'example.com' },
-      { id: 'focus', label: 'Analysis Focus', type: 'select', required: false }
-    ] },
-  }
-});
+// Define the board as YAML - much simpler and cleaner!
+const boardYAML = \`
+name: Brand Analysis Pipeline
+description: Analyze brands and generate strategic reports
 
-// ALWAYS save an artifact link so user can access the created board
-await saveArtifact({
-  name: 'Brand Analysis Pipeline Board',
-  type: 'link',
-  content: JSON.stringify({
-    type: 'board',
-    id: boardId,
-    url: \`/board/\${boardId}\`,
-    title: 'Brand Analysis Pipeline',
-    description: 'Click to open your new board'
-  })
-});
-console.log('Created board:', boardId);
+trigger:
+  name: Brand Analysis
+  methods:
+    prompt: true
+    webform: true
+  chat:
+    systemPrompt: Analyze the provided brand and generate insights
+    placeholder: Enter a brand domain to analyze...
+    images: true
+    files: true
+    urls: true
+
+stages:
+  - name: Brand Scan
+    type: agent
+    goals:
+      - Scan brand website and extract key information
+      - Extract logos, colors, and typography
+      - Identify products and services
+    skills:
+      - brandscan
+      - web
+    deliverables:
+      - name: Brand Profile
+        type: data
+        description: Structured brand data
+
+  - name: Social Analysis
+    type: agent
+    goals:
+      - Audit social media presence across platforms
+      - Analyze engagement metrics and trends
+      - Identify top performing content
+    skills:
+      - social
+      - instagram
+      - tiktok
+    deliverables:
+      - name: Social Metrics
+        type: data
+        description: Engagement data by platform
+      - name: Content Analysis
+        type: report
+
+  - name: Report Generation
+    type: agent
+    goals:
+      - Synthesize findings into comprehensive report
+      - Generate actionable recommendations
+      - Create executive summary
+    skills:
+      - pdf
+      - artifacts
+    deliverables:
+      - name: Brand Report
+        type: pdf
+        description: Full analysis PDF
+
+  - name: Human Review
+    type: human
+    goals:
+      - Review report accuracy and completeness
+      - Approve or request revisions
+\`;
+
+// Validate first (optional but recommended)
+const validation = validateBoardYAML(boardYAML);
+if (!validation.valid) {
+  console.error('Invalid board definition:', validation.errors);
+} else {
+  // Create the board atomically from YAML
+  const boardId = await createBoardFromYAML(boardYAML);
+  console.log('Created board:', boardId);
+
+  // ALWAYS save an artifact link so user can access the board
+  await saveArtifact({
+    name: 'Brand Analysis Pipeline Board',
+    type: 'link',
+    content: JSON.stringify({
+      type: 'board',
+      id: boardId,
+      url: \\\`/board/\\\${boardId}\\\`,
+      title: 'Brand Analysis Pipeline',
+      description: 'Click to open your new board'
+    })
+  });
+}
+\`\`\`
+
+**YAML DSL Reference:**
+- \`name\`: Board name (required)
+- \`description\`: What the board does
+- \`trigger\`: How cards are created (prompt, webform, webhook, schedule, email)
+- \`stages\`: Pipeline steps (each with name, type, goals, skills, deliverables)
+  - \`type\`: "agent" (AI-powered) or "human" (manual)
+  - \`goals\`: List of objectives (strings)
+  - \`skills\`: KSAs needed (strings like "web", "pdf", "social")
+  - \`deliverables\`: Expected outputs with name, type, description
+
+For existing boards, use the standard boards KSA:
+\`\`\`typescript
+import { listBoards, getBoard, addCard, runCard } from './ksa/boards';
 
 // List existing boards
 const boards = await listBoards();
-console.log('Boards:', boards.map(b => b.name));
 
-// Add a card to the board
-const cardId = await addCard(boardId, 'task-001', 'Analyze Nike brand', {
-  data: { domain: 'nike.com', depth: 'thorough' },
-  autoRun: true
-});
-
-// Wait for card to complete (with timeout)
-const result = await waitForCard(cardId, 300000); // 5 min timeout
-console.log('Card completed:', result);
-
-// Available templates: 'research-report', 'content-pipeline', 'data-analysis', 'competitor-research'
-const templateBoardId = await createBoardFromTemplate('research-report', 'My Research Project');
+// Add and run a card
+const cardId = await addCard(boardId, 'task-001', 'Analyze Nike', { autoRun: true });
 \`\`\``,
 
   brandscan: `### Brand Scan KSA (\`./ksa/brandscan\`) - Brand intelligence scanning
@@ -734,20 +577,155 @@ This enables proper tracking and retry handling.
 \`\`\`
 `;
 
+// ============================================================================
+// Intent Schema Types (mirrored from cloud - no Node.js imports in Convex)
+// ============================================================================
+
+interface IntentGoal {
+  id: string;
+  text: string;
+  importance: "critical" | "important" | "nice-to-have";
+}
+
+interface IntentDeliverable {
+  id: string;
+  type: string;
+  name: string;
+  description: string;
+}
+
+interface IntentSchema {
+  intent: {
+    summary: string;
+    objective: string;
+    context: string[];
+    domain?: string;
+  };
+  ksas: {
+    priority: string[];
+    secondary: string[];
+    notNeeded: string[];
+    reasoning: string;
+  };
+  plan: {
+    goals: IntentGoal[];
+    deliverables: IntentDeliverable[];
+    steps: string[];
+  };
+  policy: {
+    enabledKSAs: string[];
+    disabledKSAs: string[];
+    allowExternalCalls: boolean;
+    requireApprovalFor?: string[];
+  };
+  meta: {
+    model: string;
+    generatedAt: number;
+    confidence: "high" | "medium" | "low";
+    latencyMs?: number;
+  };
+}
+
+/**
+ * Generate intent schema guidance section for the system prompt.
+ * This provides structured guidance based on pre-analysis of the user request.
+ */
+function generateIntentSchemaGuidance(schema: IntentSchema): string {
+  const lines: string[] = [
+    "## 🎯 Pre-Analyzed Intent (Use This as Your Guide)",
+    "",
+    `**Objective:** ${schema.intent.objective}`,
+    "",
+  ];
+
+  // Context elements
+  if (schema.intent.context.length > 0) {
+    lines.push("**Key Context:**");
+    for (const ctx of schema.intent.context) {
+      lines.push(`- ${ctx}`);
+    }
+    lines.push("");
+  }
+
+  // Priority KSAs
+  if (schema.ksas.priority.length > 0) {
+    lines.push(
+      `**Priority KSAs (Import First):** ${schema.ksas.priority.join(", ")}`
+    );
+    lines.push(`> *${schema.ksas.reasoning}*`);
+    lines.push("");
+  }
+
+  // Goals
+  if (schema.plan.goals.length > 0) {
+    lines.push("**Goals to Accomplish:**");
+    for (const goal of schema.plan.goals) {
+      const importance =
+        goal.importance === "critical"
+          ? "🔴"
+          : goal.importance === "important"
+          ? "🟡"
+          : "🟢";
+      lines.push(`${importance} ${goal.text}`);
+    }
+    lines.push("");
+  }
+
+  // Deliverables
+  if (schema.plan.deliverables.length > 0) {
+    lines.push("**Expected Deliverables:**");
+    for (const d of schema.plan.deliverables) {
+      lines.push(`- **${d.name}** (${d.type}): ${d.description}`);
+    }
+    lines.push("");
+  }
+
+  // Suggested steps
+  if (schema.plan.steps.length > 0) {
+    lines.push("**Suggested Approach:**");
+    schema.plan.steps.forEach((step, i) => {
+      lines.push(`${i + 1}. ${step}`);
+    });
+    lines.push("");
+  }
+
+  // Policy notes
+  if (schema.policy.disabledKSAs.length > 0) {
+    lines.push(
+      `> ⚠️ **Blocked KSAs (do not use):** ${schema.policy.disabledKSAs.join(", ")}`
+    );
+  }
+  if (schema.policy.requireApprovalFor?.length) {
+    lines.push(
+      `> ℹ️ **Requires approval:** ${schema.policy.requireApprovalFor.join(", ")}`
+    );
+  }
+
+  return lines.join("\n");
+}
+
 /**
  * Get the system prompt with dynamic KSA documentation
  * @param options.allowedKSAs - If provided, only include documentation for these KSAs (core always included)
  * @param options.additions - Additional context to append
+ * @param options.intentSchema - Pre-analyzed intent schema for structured guidance
  */
 export function getCodeExecSystemPrompt(options?: {
   allowedKSAs?: string[];
   additions?: string;
+  intentSchema?: IntentSchema;
 }): string {
   // Generate dynamic KSA documentation based on what's allowed
   const ksaDocumentation = generateKSADocumentation(options?.allowedKSAs);
 
   // Replace the placeholder with dynamic content
   let prompt = CODE_EXEC_BASE_PROMPT.replace("{{KSA_DOCUMENTATION}}", ksaDocumentation);
+
+  // Add intent schema guidance FIRST (high priority)
+  if (options?.intentSchema) {
+    const intentGuidance = generateIntentSchemaGuidance(options.intentSchema);
+    prompt += `\n\n${intentGuidance}`;
+  }
 
   // Add any additional context
   if (options?.additions) {
@@ -769,6 +747,7 @@ const KSA_DISPLAY_NAMES: Record<string, string> = {
   web: "Web Research",
   news: "News Monitoring",
   social: "Social Media",
+  ads: "Ad Library Search",
   companies: "Company Intelligence",
   browser: "Browser Automation",
   pdf: "PDF Generation",

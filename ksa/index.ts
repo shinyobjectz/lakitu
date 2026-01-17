@@ -25,6 +25,7 @@ export * as beads from "./beads";
 export * as web from "./web";
 export * as news from "./news";
 export * as social from "./social";
+export * as ads from "./ads";
 export * as companies from "./companies";
 export * as browser from "./browser";
 
@@ -34,6 +35,7 @@ export * as email from "./email";
 
 // App-wide KSAs (app services and management)
 export * as boards from "./boards";
+export * as boardDSL from "./boardDSL"; // DSL-based board creation helper
 export * as brandscan from "./brandscan";
 export * as workspaces from "./workspaces";
 export * as frames from "./frames";
@@ -204,6 +206,21 @@ export const KSA_REGISTRY: KSAInfo[] = [
     icon: "mdi:account-group",
     configSchema: CONFIG_SCHEMAS.social,
     defaults: CONFIG_DEFAULTS.social,
+  },
+  {
+    name: "ads",
+    description: "Search Meta/Facebook Ad Library and Google Ads Transparency Center - use for finding competitor ads, ad creative, ad copy, and advertising campaigns",
+    category: "skills",
+    functions: [
+      "searchMetaAds",
+      "searchMetaCompanies",
+      "getMetaAdsByPageId",
+      "searchGoogleAds",
+      "searchAllAds",
+    ],
+    importPath: "./ksa/ads",
+    servicePaths: ["services.ScrapeCreators.internal.call"],
+    icon: "mdi:advertisements",
   },
   {
     name: "companies",

@@ -717,7 +717,7 @@ export const startCodeExecThread = action({
   handler: async (ctx, args) => {
     const threadId = `codeexec_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-    // Extract gateway config, model, sessionId, allowedKSAs, and skillConfigs from context
+    // Extract gateway config, model, sessionId, allowedKSAs, skillConfigs, and intentSchema from context
     const ctxObj = args.context as {
       gatewayConfig?: { convexUrl: string; jwt: string };
       cardId?: string;
@@ -725,6 +725,17 @@ export const startCodeExecThread = action({
       sessionId?: string; // For real-time log forwarding
       allowedKSAs?: string[]; // KSAs allowed for this task
       skillConfigs?: Record<string, Record<string, unknown>>; // Per-KSA configuration
+      intentSchema?: {
+        intent: { summary: string; objective: string; context: string[]; domain?: string };
+        ksas: { priority: string[]; secondary: string[]; notNeeded: string[]; reasoning: string };
+        plan: {
+          goals: Array<{ id: string; text: string; importance: string }>;
+          deliverables: Array<{ id: string; type: string; name: string; description: string }>;
+          steps: string[];
+        };
+        policy: { enabledKSAs: string[]; disabledKSAs: string[]; allowExternalCalls: boolean; requireApprovalFor?: string[] };
+        meta: { model: string; generatedAt: number; confidence: string; latencyMs?: number };
+      }; // Pre-analyzed intent schema for structured guidance
     } | undefined;
 
     if (!ctxObj?.gatewayConfig) {
@@ -746,10 +757,18 @@ export const startCodeExecThread = action({
       ? generateKSAInstructions(ctxObj.skillConfigs)
       : "";
 
-    // Run the code execution loop with dynamic KSA documentation
+    // Log if intent schema is present
+    if (ctxObj.intentSchema) {
+      console.log(
+        `[startCodeExecThread] Intent schema received: "${ctxObj.intentSchema.intent.summary}" (${ctxObj.intentSchema.meta.confidence} confidence)`
+      );
+    }
+
+    // Run the code execution loop with dynamic KSA documentation and intent schema
     const systemPrompt = getCodeExecSystemPrompt({
       allowedKSAs: ctxObj.allowedKSAs,
       additions: ksaInstructions || undefined,
+      intentSchema: ctxObj.intentSchema as any, // Type is compatible
     });
     const result = await runCodeExecLoop(ctx, systemPrompt, args.prompt, ctxObj.gatewayConfig, {
       threadId,
