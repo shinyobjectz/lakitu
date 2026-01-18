@@ -379,30 +379,22 @@ export async function generateFrame(
   const dimensions = options?.dimensions || { width: 1200, height: 600 };
 
   // Generate the HTML using LLM
-  const response = await callGateway<{ code: string }>(
+  const response = await callGateway<{ content: string }>(
     "services.OpenRouter.internal.chat",
     {
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert HTML/Tailwind CSS designer. Generate clean, responsive HTML using Tailwind CSS classes.
+      prompt: description,
+      system: `You are an expert HTML/Tailwind CSS designer. Generate clean, responsive HTML using Tailwind CSS classes.
 ${styleHint}
 Output ONLY the HTML code, no explanations or markdown.
 The design should fit ${dimensions.width}x${dimensions.height} pixels.`,
-        },
-        {
-          role: "user",
-          content: description,
-        },
-      ],
       model: "anthropic/claude-3-5-sonnet",
-      max_tokens: 4000,
+      maxTokens: 4000,
     },
     "action"
   );
 
   // Extract HTML from response
-  let code = response.code || "";
+  let code = response.content || "";
 
   // Clean up the response - remove markdown code blocks if present
   code = code.replace(/```html?\n?/g, "").replace(/```\n?$/g, "").trim();

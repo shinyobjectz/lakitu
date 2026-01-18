@@ -39,9 +39,10 @@ const envFile = loadEnvFile();
 const GATEWAY_URL = process.env.GATEWAY_URL || envFile.GATEWAY_URL || "http://localhost:3210";
 const JWT = process.env.SANDBOX_JWT || envFile.SANDBOX_JWT || "";
 
-// Export THREAD_ID and CARD_ID for other KSAs to use
+// Export THREAD_ID, CARD_ID, and WORKSPACE_ID for other KSAs to use
 export const THREAD_ID = process.env.THREAD_ID || envFile.THREAD_ID;
 export const CARD_ID = process.env.CARD_ID || envFile.CARD_ID;
+export const WORKSPACE_ID = process.env.WORKSPACE_ID || envFile.WORKSPACE_ID;
 
 /**
  * Call the cloud gateway to invoke a Convex service.

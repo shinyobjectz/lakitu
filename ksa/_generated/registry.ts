@@ -46,9 +46,9 @@ export const KSA_REGISTRY: KSAInfo[] = [
     name: "brandscan",
     description: "Brand Lookup KSA - Knowledge, Skills, and Abilities Lightweight brand lookups for AI agents. Uses existing brand library data or fast API lookups. IMPORTANT: This KSA does NOT trigger full brand scans. Full scans involve web crawling and can take minutes. For agent tasks, use these lightweight lookups instead.",
     category: "skills" as const,
-    functions: ["lookupBrand", "searchBrands", "getBrandFromLibrary", "getBrandData", "getBrandSummary", "listBrands", "getBrandByDomain"],
+    functions: ["lookupBrand", "searchBrands", "getBrandFromLibrary", "getBrandData", "getBrandSummary", "listBrands", "getBrandByDomain", "listBrandAssets", "listBrandProducts", "listBrandAds"],
     importPath: "./ksa/brandscan",
-    servicePaths: ["features.brands.agentBrandLookup.lookupBrand", "features.brands.agentBrandLookup.searchBrands", "features.brands.agentBrandLookup.getBrandFromLibrary", "features.brands.core.crud.get", "features.brands.core.products.getBrandIntelligenceSummary", "features.brands.core.crud.list", "features.brands.core.crud.getByDomain"],
+    servicePaths: ["features.brands.agentBrandLookup.lookupBrand", "features.brands.agentBrandLookup.searchBrands", "features.brands.agentBrandLookup.getBrandFromLibrary", "features.brands.agentBrandLookup.listBrandAssets", "features.brands.agentBrandLookup.listBrandProducts", "features.brands.agentBrandLookup.listBrandAds", "features.brands.core.crud.get", "features.brands.core.products.getBrandIntelligenceSummary", "features.brands.core.crud.list", "features.brands.core.crud.getByDomain"],
     isLocal: false,
   },
   {
@@ -120,7 +120,7 @@ export const KSA_REGISTRY: KSAInfo[] = [
     category: "core" as const,
     functions: ["setGatewayConfig", "saveArtifact", "readArtifact", "listArtifacts"],
     importPath: "./ksa/artifacts",
-    servicePaths: ["internal.agent.workflows.crudThreads.saveThreadArtifact", "features.kanban.artifacts.saveArtifactWithBackup", "features.kanban.artifacts.getArtifact", "internal.agent.workflows.crudThreads.listThreadArtifactsInternal", "features.kanban.artifacts.listCardArtifacts"],
+    servicePaths: ["internal.agent.workflows.crudThreads.saveThreadArtifact", "features.kanban.artifacts.saveArtifactWithBackup", "features.kanban.artifacts.getArtifact", "internal.agent.workflows.crudThreads.listThreadArtifactsInternal", "features.kanban.artifacts.listCardArtifacts", "internal.features.workspaces.internal.getCanvasInternal", "internal.features.workspaces.internal.saveCanvasInternal"],
     isLocal: false,
   },
   {
@@ -156,7 +156,7 @@ export const KSA_REGISTRY: KSAInfo[] = [
     category: "skills" as const,
     functions: ["createFrame", "getFrame", "listFrames", "updateFrame", "deleteFrame", "generateFrame", "createPage", "getPage", "listPages", "updatePage", "getTemplates", "getAdSpecs", "snapshotFrame", "rollbackFrame", "trackView", "trackConversion"],
     importPath: "./ksa/frames",
-    servicePaths: ["features.frames.crud.createFrame", "features.frames.crud.getFrame", "features.frames.crud.listFrames", "features.frames.crud.updateFrame", "features.frames.crud.deleteFrame", "services.OpenRouter.internal.chat", "features.frames.crud.createPage", "features.frames.crud.getPage", "features.frames.crud.listPages", "features.frames.crud.updatePage", "features.frames.templates.listTemplates", "features.frames.ads.getAdSpecs", "features.frames.versions.snapshot", "features.frames.versions.rollback", "features.frames.analytics.trackView", "features.frames.analytics.trackConversion"],
+    servicePaths: ["internal.features.frames.internal.createFrameInternal", "internal.features.frames.internal.getFrameInternal", "internal.features.frames.internal.listFramesInternal", "internal.features.frames.internal.updateFrameInternal", "internal.features.frames.internal.deleteFrameInternal", "internal.features.frames.internal.createPageInternal", "internal.features.frames.internal.getPageInternal", "internal.features.frames.internal.listPagesInternal", "internal.features.frames.internal.updatePageInternal", "internal.features.frames.internal.snapshotFrameInternal", "internal.features.frames.internal.rollbackFrameInternal", "internal.features.workspaces.internal.getCanvasInternal", "internal.features.workspaces.internal.saveCanvasInternal", "services.OpenRouter.internal.chat", "features.frames.templates.listTemplates", "features.frames.ads.getAdSpecs", "features.frames.analytics.trackView", "features.frames.analytics.trackConversion"],
     isLocal: false,
   },
   {

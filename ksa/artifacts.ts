@@ -23,7 +23,7 @@
  * const artifacts = await listArtifacts();
  */
 
-import { callGateway, THREAD_ID, CARD_ID } from "./_shared/gateway";
+import { callGateway, THREAD_ID, CARD_ID, WORKSPACE_ID } from "./_shared/gateway";
 
 // ============================================================================
 // Types
@@ -156,6 +156,16 @@ export async function saveArtifact(
       );
 
       console.log(`[artifacts] Saved thread artifact: ${params.name}`);
+
+      // If in workspace context, add artifact as canvas element
+      if (WORKSPACE_ID) {
+        try {
+          await addArtifactToCanvas(WORKSPACE_ID, artifactId, params.name, params.type);
+        } catch (canvasErr) {
+          console.warn(`[artifacts] Failed to add to canvas: ${canvasErr}`);
+        }
+      }
+
       return {
         success: true,
         id: artifactId,
@@ -320,4 +330,72 @@ export async function listArtifacts(): Promise<ListResult> {
     const msg = error instanceof Error ? error.message : String(error);
     return { success: false, error: msg, artifacts: [], count: 0 };
   }
+}
+
+// ============================================================================
+// Canvas Integration (Workspace Context)
+// ============================================================================
+
+/**
+ * Add an artifact to the workspace canvas as a file widget.
+ * @internal
+ */
+async function addArtifactToCanvas(
+  workspaceId: string,
+  artifactId: string,
+  name: string,
+  type: string
+): Promise<void> {
+  // Get current canvas
+  const currentCanvas = await callGateway<any>(
+    "internal.features.workspaces.internal.getCanvasInternal",
+    { workspaceId },
+    "query"
+  );
+
+  const canvas = currentCanvas || {
+    version: "1.0",
+    elements: [],
+    connections: [],
+    viewport: { offset: { x: 0, y: 0 }, zoom: 1 },
+    settings: {},
+  };
+
+  // Calculate position (stack below existing elements)
+  const existingElements = canvas.elements || [];
+  const maxY = existingElements.reduce((max: number, el: any) => {
+    const elBottom = (el.position?.y || 0) + (el.size?.y || 100);
+    return Math.max(max, elBottom);
+  }, 0);
+
+  // Add artifact as a file widget element
+  canvas.elements = [
+    ...existingElements,
+    {
+      id: `artifact-${artifactId}`,
+      position: { x: 100, y: maxY + 30 },
+      size: { x: 200, y: 80 },
+      data: {
+        type: "file",
+        label: name,
+        fileType: type,
+        artifactId,
+      },
+      style: {
+        fill: "#1f2937",
+        stroke: "#374151",
+        strokeWidth: 1,
+        borderRadius: 8,
+      },
+    },
+  ];
+
+  // Save updated canvas
+  await callGateway<void>(
+    "internal.features.workspaces.internal.saveCanvasInternal",
+    { workspaceId, canvas },
+    "mutation"
+  );
+
+  console.log(`[artifacts] Added artifact ${name} to workspace canvas`);
 }

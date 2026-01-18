@@ -218,24 +218,39 @@ export async function getBrandFromLibrary(domain: string): Promise<BrandLite | n
 // ============================================================================
 
 /**
- * Get full brand data from library - READ ONLY.
+ * Get full brand data - READ ONLY.
  *
- * Returns complete brand data including styleguide, products, and ads.
- * Only works for brands that have been scanned and added to the library.
+ * Accepts either a Convex document ID or a domain name.
+ * If a domain is detected, automatically looks up by domain.
  *
- * @param brandId - The brand ID
+ * @param brandIdOrDomain - Either a Convex ID (from brand._id) or a domain (e.g., 'mixpanel.com')
  * @returns Full brand data
  *
  * @example
- * const brand = await getBrandData(brandId);
- * console.log('Brand:', brand.name);
- * console.log('Colors:', brand.styleguide?.colors);
- * console.log('Products:', brand.products?.length);
+ * // Works with domain:
+ * const brand = await getBrandData('mixpanel.com');
+ *
+ * // Also works with Convex ID:
+ * const brand = await getBrandData(existingBrand._id);
  */
-export async function getBrandData(brandId: string): Promise<BrandData> {
+export async function getBrandData(brandIdOrDomain: string): Promise<BrandData> {
+  // Detect if input looks like a domain (contains . but no Convex ID pattern)
+  const looksLikeDomain = brandIdOrDomain.includes('.') && !brandIdOrDomain.includes('|');
+  
+  if (looksLikeDomain) {
+    // Normalize and look up by domain
+    const domain = brandIdOrDomain.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+    const brand = await getBrandByDomain(domain);
+    if (!brand) {
+      throw new Error(`Brand not found for domain: ${domain}`);
+    }
+    return brand;
+  }
+  
+  // Assume it's a Convex ID
   const response = await callGateway<BrandData>(
     "features.brands.core.crud.get",
-    { brandId },
+    { id: brandIdOrDomain },
     "query"
   );
   return response;
@@ -301,13 +316,18 @@ export async function listBrands(): Promise<BrandData[]> {
 /**
  * Get brand by domain from library - READ ONLY.
  *
- * @param domain - The domain to look up
+ * This is the RECOMMENDED way to get brand data when you have a domain.
+ * Returns full brand data including styleguide, products, and more.
+ *
+ * @param domain - The domain to look up (e.g., 'mixpanel.com', 'seismic.com')
  * @returns Brand data or null if not in library
  *
  * @example
- * const brand = await getBrandByDomain('anthropic.com');
+ * // Get full brand data by domain (recommended)
+ * const brand = await getBrandByDomain('mixpanel.com');
  * if (brand) {
  *   console.log('Found:', brand.name);
+ *   console.log('Colors:', brand.styleguide?.colors);
  * }
  */
 export async function getBrandByDomain(domain: string): Promise<BrandData | null> {
@@ -320,5 +340,145 @@ export async function getBrandByDomain(domain: string): Promise<BrandData | null
     return response;
   } catch {
     return null;
+  }
+}
+
+// ============================================================================
+// Functions - Asset Retrieval (Read-Only)
+// ============================================================================
+
+/**
+ * Brand asset data.
+ */
+export interface BrandAsset {
+  id: string;
+  type: string;
+  url?: string;
+  r2Key?: string;
+  content?: string;
+  sourceUrl: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Brand product data.
+ */
+export interface BrandProduct {
+  id: string;
+  name: string;
+  description?: string;
+  type: 'physical' | 'saas' | 'service';
+  price?: string;
+  images: string[];
+  url?: string;
+}
+
+/**
+ * Brand ad data.
+ */
+export interface BrandAd {
+  id: string;
+  platform: string;
+  headline?: string;
+  body?: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  cta?: string;
+  landingUrl?: string;
+}
+
+/**
+ * Get brand assets (images, videos, marketing copy) - READ ONLY.
+ *
+ * Returns all assets associated with a brand including:
+ * - hero_image, product_image, backdrop (images)
+ * - video (videos)
+ * - value_prop, marketing_copy, testimonial, cta (text content)
+ *
+ * @param brandId - The brand ID
+ * @param limit - Maximum results (default: 50)
+ * @returns Array of brand assets with URLs
+ *
+ * @example
+ * const assets = await listBrandAssets(brandId);
+ * const images = assets.filter(a => a.type === 'hero_image' || a.type === 'product_image');
+ * for (const img of images) {
+ *   console.log(`Image: ${img.url}`);
+ * }
+ */
+export async function listBrandAssets(brandId: string, limit = 50): Promise<BrandAsset[]> {
+  try {
+    const response = await callGateway<BrandAsset[]>(
+      "features.brands.agentBrandLookup.listBrandAssets",
+      { brandId, limit },
+      "action"
+    );
+    return response;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get brand products - READ ONLY.
+ *
+ * Returns products from the brand's catalog including:
+ * - Physical products (e-commerce)
+ * - SaaS products (software)
+ * - Services
+ *
+ * @param brandId - The brand ID
+ * @param limit - Maximum results (default: 50)
+ * @returns Array of products with images
+ *
+ * @example
+ * const products = await listBrandProducts(brandId);
+ * for (const p of products) {
+ *   console.log(`${p.name}: ${p.images[0]}`);
+ * }
+ */
+export async function listBrandProducts(brandId: string, limit = 50): Promise<BrandProduct[]> {
+  try {
+    const response = await callGateway<BrandProduct[]>(
+      "features.brands.agentBrandLookup.listBrandProducts",
+      { brandId, limit },
+      "action"
+    );
+    return response;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get brand ads - READ ONLY.
+ *
+ * Returns ads from various platforms:
+ * - Meta (Facebook/Instagram)
+ * - Google
+ * - TikTok
+ * - LinkedIn
+ *
+ * @param brandId - The brand ID
+ * @param limit - Maximum results (default: 50)
+ * @returns Array of ads with creative URLs
+ *
+ * @example
+ * const ads = await listBrandAds(brandId);
+ * const metaAds = ads.filter(a => a.platform === 'meta');
+ * for (const ad of metaAds) {
+ *   console.log(`${ad.headline}: ${ad.imageUrl}`);
+ * }
+ */
+export async function listBrandAds(brandId: string, limit = 50): Promise<BrandAd[]> {
+  try {
+    const response = await callGateway<BrandAd[]>(
+      "features.brands.agentBrandLookup.listBrandAds",
+      { brandId, limit },
+      "action"
+    );
+    return response;
+  } catch {
+    return [];
   }
 }

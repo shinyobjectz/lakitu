@@ -27,7 +27,11 @@ export {
   getBrandSummary,
   listBrands,
   getBrandByDomain,
+  // Asset retrieval
+  listBrandAssets,
+  listBrandProducts,
+  listBrandAds,
 } from "./brandLibrary";
 
 // Re-export types
-export type { BrandLite, BrandData } from "./brandLibrary";
+export type { BrandLite, BrandData, BrandAsset, BrandProduct, BrandAd } from "./brandLibrary";
