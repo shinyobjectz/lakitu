@@ -30,6 +30,99 @@ import { api } from "../convex/_generated/api";
 import { ConvexClient } from "convex/browser";
 
 // ============================================================================
+// ScrapeDo Fallback - For JS-rendered pages that Valyu can't handle
+// ============================================================================
+
+interface ScrapeDoResult {
+  url: string;
+  markdown: string;
+  html?: string;
+  title?: string;
+}
+
+/**
+ * Scrape a URL using ScrapeDo via gateway.
+ * Use this for sites that need JS rendering or when Valyu fails.
+ *
+ * @param url - URL to scrape
+ * @param options - Scraping options
+ * @returns Scraped content
+ *
+ * @example
+ * // Scrape a JS-heavy SPA
+ * const content = await scrapeWithScrapeDo("https://example.com");
+ * console.log(content.markdown);
+ *
+ * // Scrape with residential proxy for anti-bot sites
+ * const content = await scrapeWithScrapeDo("https://example.com", {
+ *   useResidentialProxy: true,
+ *   scrollCount: 5
+ * });
+ */
+export async function scrapeWithScrapeDo(
+  url: string,
+  options?: {
+    render?: boolean;
+    scrollCount?: number;
+    useResidentialProxy?: boolean;
+  }
+): Promise<ScrapeDoResult> {
+  const response = await callGateway("services.ScrapeDo.internal.scrapeSPA", {
+    url,
+    scrollCount: options?.scrollCount ?? 3,
+    clickLoadMore: true,
+    extractNextData: true,
+    super: options?.useResidentialProxy ?? false,
+  });
+
+  if (!response.success) {
+    throw new Error(`ScrapeDo failed: ${response.error}`);
+  }
+
+  return {
+    url,
+    markdown: response.markdown || "",
+    html: response.html,
+    title: response.title,
+  };
+}
+
+/**
+ * Scrape with automatic fallback: tries Valyu first, then ScrapeDo.
+ * This handles both simple sites (Valyu) and JS-heavy sites (ScrapeDo).
+ *
+ * @param url - URL to scrape
+ * @returns Scraped content
+ */
+async function scrapeWithFallback(url: string): Promise<ScrapeDoResult> {
+  // Try Valyu first (faster, simpler)
+  try {
+    const content = await scrape(url);
+    if (content.markdown && content.markdown.length > 500) {
+      return {
+        url,
+        markdown: content.markdown,
+        title: content.title,
+      };
+    }
+    console.log(`[BrandResearch] Valyu returned thin content, trying ScrapeDo...`);
+  } catch (e) {
+    console.log(`[BrandResearch] Valyu failed, trying ScrapeDo...`);
+  }
+
+  // Fallback to ScrapeDo (handles JS rendering)
+  const scrapedoResult = await scrapeWithScrapeDo(url);
+
+  // If still thin, try with residential proxy
+  if (!scrapedoResult.markdown || scrapedoResult.markdown.length < 500) {
+    console.log(`[BrandResearch] Content thin, retrying with residential proxy...`);
+    return await scrapeWithScrapeDo(url, { useResidentialProxy: true, scrollCount: 5 });
+  }
+
+  return scrapedoResult;
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -437,8 +530,8 @@ export async function scrapeProducts(
 
   for (const urlRecord of urlsToScrape) {
     try {
-      // Scrape the page
-      const content = await scrape(urlRecord.url);
+      // Scrape the page with automatic fallback (Valyu → ScrapeDo)
+      const content = await scrapeWithFallback(urlRecord.url);
 
       // Extract products using LLM
       const products = await extractProductsFromContent(
