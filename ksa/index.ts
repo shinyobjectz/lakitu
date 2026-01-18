@@ -10,47 +10,85 @@
  * - **skills**: Research & data gathering - require explicit enablement
  * - **deliverables**: Non-standard output formats (PDF, email) - require explicit enablement
  *
+ * ## Local DB Framework Integration
+ *
+ * All KSAs are automatically wrapped with the framework proxy layer.
+ * This enables:
+ * - **Caching**: Avoid redundant API calls
+ * - **File Tracking**: Automatic file state tracking in local DB
+ * - **Call Logging**: Observe what the agent does
+ * - **Session Persistence**: Store results across agent runs
+ *
  * The KSA_REGISTRY is auto-generated from KSA source files.
  * Run `bun generate:ksa` to regenerate.
  */
 
+import { createKSAProxyAuto } from "./_shared/ksaProxy";
+
 // ============================================================================
-// Re-exports for Agent Code Execution
+// Raw Module Imports
+// ============================================================================
+
+import * as fileRaw from "./file";
+import * as contextRaw from "./context";
+import * as artifactsRaw from "./artifacts";
+import * as beadsRaw from "./beads";
+import * as webRaw from "./web";
+import * as newsRaw from "./news";
+import * as socialRaw from "./social";
+import * as adsRaw from "./ads";
+import * as companiesRaw from "./companies";
+import * as browserRaw from "./browser";
+import * as pdfRaw from "./pdf";
+import * as emailRaw from "./email";
+import * as boardsRaw from "./boards";
+import * as boardDSLRaw from "./boardDSL";
+import * as brandLibraryRaw from "./brandLibrary";
+import * as brandResearchRaw from "./brandResearch";
+import * as brandIntelRaw from "./brandIntel";
+import * as workspacesRaw from "./workspaces";
+import * as framesRaw from "./frames";
+import * as loggerRaw from "./logger";
+
+// ============================================================================
+// Proxied KSA Exports (with automatic local DB integration)
 // ============================================================================
 
 // Core KSAs (always available)
-export * as file from "./file";
-export * as context from "./context";
-export * as artifacts from "./artifacts";
-export * as beads from "./beads";
+export const file = createKSAProxyAuto("file", fileRaw);
+export const context = createKSAProxyAuto("context", contextRaw);
+export const artifacts = createKSAProxyAuto("artifacts", artifactsRaw);
+export const beads = createKSAProxyAuto("beads", beadsRaw);
 
 // Skills KSAs (research & data gathering)
-export * as web from "./web";
-export * as news from "./news";
-export * as social from "./social";
-export * as ads from "./ads";
-export * as companies from "./companies";
-export * as browser from "./browser";
+export const web = createKSAProxyAuto("web", webRaw);
+export const news = createKSAProxyAuto("news", newsRaw);
+export const social = createKSAProxyAuto("social", socialRaw);
+export const ads = createKSAProxyAuto("ads", adsRaw);
+export const companies = createKSAProxyAuto("companies", companiesRaw);
+export const browser = createKSAProxyAuto("browser", browserRaw);
 
 // Deliverables KSAs (non-standard output formats)
-export * as pdf from "./pdf";
-export * as email from "./email";
+export const pdf = createKSAProxyAuto("pdf", pdfRaw);
+export const email = createKSAProxyAuto("email", emailRaw);
 
 // App-wide KSAs (app services and management)
-export * as boards from "./boards";
-export * as boardDSL from "./boardDSL";
-export * as brandLibrary from "./brandLibrary";
-export * as brandResearch from "./brandResearch";
-export * as workspaces from "./workspaces";
-export * as frames from "./frames";
+export const boards = createKSAProxyAuto("boards", boardsRaw);
+export const boardDSL = createKSAProxyAuto("boardDSL", boardDSLRaw);
+export const brandLibrary = createKSAProxyAuto("brandLibrary", brandLibraryRaw);
+export const brandResearch = createKSAProxyAuto("brandResearch", brandResearchRaw);
+export const brandIntel = createKSAProxyAuto("brandIntel", brandIntelRaw);
+export const workspaces = createKSAProxyAuto("workspaces", workspacesRaw);
+export const frames = createKSAProxyAuto("frames", framesRaw);
+export const logger = createKSAProxyAuto("logger", loggerRaw);
 
 // Legacy alias - use 'brandLibrary' instead
 /** @deprecated Use 'brandLibrary' instead */
-export * as brandscan from "./brandLibrary";
+export const brandscan = brandLibrary;
 
 // Legacy alias - use 'artifacts' instead
 /** @deprecated Use 'artifacts' instead */
-export { saveArtifact, readArtifact, listArtifacts } from "./artifacts";
+export const { saveArtifact, readArtifact, listArtifacts } = artifacts as typeof artifactsRaw;
 
 // ============================================================================
 // Re-exports from Generated Registry
@@ -91,7 +129,50 @@ export {
   getPreset,
   getPresetsForKSA,
   resolvePreset,
+  // Framework config
+  FRAMEWORK_CONFIG_SCHEMA,
+  FRAMEWORK_DEFAULTS,
+  getFrameworkConfig,
 } from "./_shared/configSchemas";
+
+export type { FrameworkConfig } from "./_shared/configSchemas";
+
+// ============================================================================
+// Re-exports from Local DB Framework
+// ============================================================================
+
+export {
+  localDb,
+  getSessionId,
+  getThreadId,
+  getCardId,
+  isLocalDbAvailable,
+  getLocalDbConfig,
+} from "./_shared/localDb";
+
+export {
+  createKSAProxy,
+  createKSAProxies,
+  createKSAProxyAuto,
+  isProxyDisabled,
+  getProxyDebugInfo,
+} from "./_shared/ksaProxy";
+
+export type { ProxyOptions } from "./_shared/ksaProxy";
+
+export {
+  KSA_BEHAVIORS,
+  getBehavior,
+  hasCustomBehaviors,
+} from "./_shared/ksaBehaviors";
+
+export type {
+  KSABehavior,
+  BeforeHook,
+  AfterHook,
+  HookContext,
+  BeforeHookResult,
+} from "./_shared/ksaBehaviors";
 
 // ============================================================================
 // Prompt Generation
