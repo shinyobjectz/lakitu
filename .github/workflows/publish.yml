@@ -1,0 +1,51 @@
+name: Publish to npm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sdk/**'
+      - 'cli/**'
+      - 'convex/**'
+      - 'ksa/**'
+      - 'runtime/**'
+      - 'template/**'
+      - 'package.json'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --ignore-scripts
+
+      - name: Build
+        run: bun run build
+
+      - name: Check if version changed
+        id: version
+        run: |
+          CURRENT=$(npm view @lakitu/sdk version 2>/dev/null || echo "0.0.0")
+          NEW=$(node -p "require('./package.json').version")
+          if [ "$CURRENT" != "$NEW" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Version changed: $CURRENT -> $NEW"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Version unchanged: $CURRENT"
+          fi
+
+      - name: Publish to npm
+        if: steps.version.outputs.changed == 'true' || github.event_name == 'release'
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+          npm publish --access public

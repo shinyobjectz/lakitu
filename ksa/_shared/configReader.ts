@@ -256,3 +256,47 @@ export function getCompaniesConfig(): {
 export function clearConfigCache(): void {
   configCache = null;
 }
+
+// =============================================================================
+// Framework Config (Local DB Integration)
+// =============================================================================
+
+import {
+  FRAMEWORK_DEFAULTS,
+  type FrameworkConfig,
+} from "./configSchemas";
+
+/**
+ * Get framework config for a specific KSA.
+ * Framework config controls automatic local DB behaviors like caching and tracking.
+ *
+ * @param ksaName - Name of the KSA (optional, for KSA-specific overrides)
+ * @returns Framework configuration
+ *
+ * @example
+ * const frameworkConfig = getFrameworkConfigForKSA('file');
+ * if (frameworkConfig.trackFileState) {
+ *   // Track file access
+ * }
+ */
+export function getFrameworkConfigForKSA(ksaName?: string): FrameworkConfig {
+  const allConfigs = parseSkillConfigs();
+
+  // Check for KSA-specific framework overrides
+  const ksaConfig = ksaName ? allConfigs[ksaName] || {} : {};
+
+  // Check for global framework config
+  const frameworkConfig = allConfigs._framework || {};
+
+  // Merge: defaults < global framework < KSA-specific
+  return {
+    ...FRAMEWORK_DEFAULTS,
+    ...frameworkConfig,
+    // Only include framework-relevant fields from KSA config
+    ...(ksaConfig.cacheResults !== undefined && { cacheResults: ksaConfig.cacheResults }),
+    ...(ksaConfig.cacheTTLMs !== undefined && { cacheTTLMs: ksaConfig.cacheTTLMs }),
+    ...(ksaConfig.trackCalls !== undefined && { trackCalls: ksaConfig.trackCalls }),
+    ...(ksaConfig.trackFileState !== undefined && { trackFileState: ksaConfig.trackFileState }),
+    ...(ksaConfig.persistToSession !== undefined && { persistToSession: ksaConfig.persistToSession }),
+  } as FrameworkConfig;
+}

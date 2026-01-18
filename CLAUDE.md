@@ -3,6 +3,35 @@
 > **AUDIENCE**: This document is for YOU, the AI agent (Claude Code, Cursor, etc.) working on this codebase.
 > Read this BEFORE writing any code.
 
+## ⚠️ CRITICAL: Sandbox Rebuild Required After Changes
+
+**Any changes to files in `packages/lakitu/` require a sandbox rebuild!**
+
+The agent code runs inside an E2B sandbox template. Your changes are NOT automatically deployed - you must rebuild the template for changes to take effect.
+
+### Files That Require Rebuild
+
+| Path | What It Contains |
+|------|------------------|
+| `ksa/*.ts` | KSA modules (brandLibrary, frames, artifacts, etc.) |
+| `ksa/_shared/*.ts` | Gateway, config readers |
+| `ksa/_generated/*.ts` | Registry, reference docs |
+| `runtime/*.ts` | CLI commands |
+| `template/*.ts` | Template builder |
+
+### Rebuild Commands
+
+```bash
+bun sandbox:custom       # Quick rebuild (~1 min) - USE THIS for KSA changes
+bun sandbox              # Full rebuild (~5 min) - only if base dependencies changed
+```
+
+### Common Mistake
+
+You edit a KSA file but forget to rebuild. The agent continues using the OLD code and your fix doesn't work. **Always rebuild after changes!**
+
+---
+
 ## Taxonomy Warning
 
 > **CRITICAL**: The terms "tools" and "skills" are OVERLOADED in AI codebases.
@@ -151,11 +180,16 @@ const result = await myFunction('input');
 console.log(result);
 ```
 
+3. **⚠️ REBUILD SANDBOX**: `bun sandbox:custom` from project root!
+
 ### Option B: Add a CLI Command (For File Output)
 
 1. Create `runtime/my-command.ts`
 2. Copy to `/usr/local/bin/` in `template/build.ts`
-3. Agent uses via: `bash: my-command "args"`
+3. **⚠️ REBUILD SANDBOX**: `bun sandbox:custom`
+4. Agent uses via: `bash: my-command "args"`
+
+> **IMPORTANT**: Changes to ANY file in `packages/lakitu/` require `bun sandbox:custom` to take effect!
 
 ### NEVER Do This
 

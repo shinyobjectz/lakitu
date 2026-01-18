@@ -58,6 +58,82 @@ export const INSTRUCTIONS_FIELD: ConfigField = {
 };
 
 // =============================================================================
+// Framework Config (Local DB Integration)
+// =============================================================================
+
+/**
+ * Framework-level config fields that control automatic local DB behaviors.
+ * These are applied to ALL KSAs via the proxy layer.
+ */
+export const FRAMEWORK_CONFIG_SCHEMA: Record<string, ConfigField> = {
+  // Caching
+  cacheResults: {
+    type: "boolean",
+    label: "Cache Results",
+    description: "Cache function results in local DB to avoid redundant calls",
+    default: true,
+  },
+  cacheTTLMs: {
+    type: "number",
+    label: "Cache TTL (ms)",
+    description: "How long cached results are valid (milliseconds)",
+    min: 0,
+    max: 3600000, // 1 hour max
+    default: 300000, // 5 minutes
+  },
+
+  // State Tracking
+  trackCalls: {
+    type: "boolean",
+    label: "Track Calls",
+    description: "Log all KSA function calls to local DB for debugging",
+    default: true,
+  },
+  trackFileState: {
+    type: "boolean",
+    label: "Track File State",
+    description: "Track file reads/writes/edits in local DB (file KSA only)",
+    default: true,
+  },
+
+  // Session Persistence
+  persistToSession: {
+    type: "boolean",
+    label: "Persist to Session",
+    description: "Store results in session memory for cross-run access",
+    default: false,
+  },
+};
+
+export const FRAMEWORK_DEFAULTS: Record<string, unknown> = {
+  cacheResults: true,
+  cacheTTLMs: 300000,
+  trackCalls: true,
+  trackFileState: true,
+  persistToSession: false,
+};
+
+/**
+ * Framework config type for TypeScript consumers.
+ */
+export interface FrameworkConfig {
+  cacheResults: boolean;
+  cacheTTLMs: number;
+  trackCalls: boolean;
+  trackFileState: boolean;
+  persistToSession: boolean;
+}
+
+/**
+ * Get framework config merged with defaults.
+ */
+export function getFrameworkConfig(
+  userConfig: Partial<FrameworkConfig> = {}
+): FrameworkConfig {
+  return { ...FRAMEWORK_DEFAULTS, ...userConfig } as FrameworkConfig;
+}
+
+// =============================================================================
 // Web KSA Config
 // =============================================================================
 
@@ -485,6 +561,7 @@ export const KSA_PRESETS: PresetDefinition[] = [
 // =============================================================================
 
 export const CONFIG_SCHEMAS: Record<string, Record<string, ConfigField>> = {
+  _framework: FRAMEWORK_CONFIG_SCHEMA,
   web: WEB_CONFIG_SCHEMA,
   social: SOCIAL_CONFIG_SCHEMA,
   companies: COMPANIES_CONFIG_SCHEMA,
@@ -496,6 +573,7 @@ export const CONFIG_SCHEMAS: Record<string, Record<string, ConfigField>> = {
 };
 
 export const CONFIG_DEFAULTS: Record<string, Record<string, unknown>> = {
+  _framework: FRAMEWORK_DEFAULTS,
   web: WEB_DEFAULTS,
   social: SOCIAL_DEFAULTS,
   companies: COMPANIES_DEFAULTS,

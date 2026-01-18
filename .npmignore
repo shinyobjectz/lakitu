@@ -1,0 +1,19 @@
+# Source files (dist is published)
+sdk/
+ksa/
+convex/
+runtime/
+template/
+shared/
+assets/
+
+# Config
+tsconfig.json
+tsconfig.build.json
+vitest.config.ts
+.git
+.gitignore
+
+# Dev files
+CLAUDE.md
+*.test.ts

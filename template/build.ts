@@ -114,6 +114,8 @@ async function prebuildConvex(): Promise<string> {
 CONVEX_SELF_HOSTED_ADMIN_KEY=0135d8598650f8f5cb0f30c34ec2e2bb62793bc28717c8eb6fb577996d50be5f4281b59181095065c5d0f86a2c31ddbe9b597ec62b47ded69782cd
 `);
 
+  // Deploy sandbox functions (not the cloud component)
+  // Note: convex.json specifies "functions": "convex/sandbox" to target the sandbox directory
   const deploy = await $`cd ${LAKITU_DIR} && ./node_modules/.bin/convex dev --once --typecheck disable --env-file ${tempEnvFile}`
     .env(cleanEnv)
     .nothrow();
@@ -209,7 +211,7 @@ const customTemplate = (baseId: string, buildDir: string) => Template()
     export HOME=/home/user && \
     export PATH="/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin" && \
     cd /home/user/lakitu && bun install && \
-    sudo cp /home/user/lakitu/runtime/generate-pdf /usr/local/bin/generate-pdf && \
+    echo '#!/bin/bash\nbun run /home/user/lakitu/runtime/pdf/pdf-generator.ts "$@"' | sudo tee /usr/local/bin/generate-pdf && \
     sudo chmod +x /usr/local/bin/generate-pdf && \
     cp -r /home/user/lakitu/ksa /home/user/ksa && \
     chown -R user:user /home/user/ksa
