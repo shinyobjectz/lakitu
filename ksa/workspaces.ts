@@ -34,37 +34,41 @@ export interface Workspace {
 
 export interface CanvasState {
   version: string;
-  elements: CanvasElement[];
-  connections: Connection[];
-  viewport: {
-    offset: { x: number; y: number };
-    zoom: number;
-  };
+  /** Canvas nodes (React Flow format - used by database and frontend) */
+  nodes: CanvasNode[];
+  /** Canvas edges (React Flow format) */
+  edges: Edge[];
+  /** Optional markers for drawing */
+  markers?: unknown[];
+  /** Zoom level */
+  zoom: number;
+  /** Translation/offset */
+  translation: { x: number; y: number };
   settings?: Record<string, unknown>;
 }
 
-export interface CanvasElement {
+export interface CanvasNode {
   id: string;
   position: { x: number; y: number };
-  size: { width: number; height: number };
+  /** Node type (React Flow convention) */
+  type: "frame" | "shape" | "text" | "image" | "group";
+  /** Node data payload */
   data: {
-    nodeType: "frame" | "shape" | "text" | "image" | "group";
+    name?: string;
     label?: string;
+    width?: number;
+    height?: number;
     code?: string;
     codeType?: string;
     imageUrl?: string;
     frameId?: string;
-  };
-  style?: {
     fill?: string;
-    stroke?: string;
-    strokeWidth?: number;
-    borderRadius?: number;
-    opacity?: number;
+    stroke?: { color?: string; width?: number };
+    cornerRadius?: number;
   };
 }
 
-export interface Connection {
+export interface Edge {
   id: string;
   source: string;
   target: string;
@@ -75,6 +79,11 @@ export interface Connection {
     strokeWidth?: number;
   };
 }
+
+/** @deprecated Use CanvasNode instead */
+export type CanvasElement = CanvasNode;
+/** @deprecated Use Edge instead */
+export type Connection = Edge;
 
 export interface Design {
   _id: string;
@@ -99,7 +108,7 @@ export interface Design {
  * @example
  * const workspaces = await listWorkspaces();
  * for (const ws of workspaces) {
- *   console.log(`${ws.name} - ${ws.canvas?.elements.length || 0} elements`);
+ *   console.log(`${ws.name} - ${ws.canvas?.nodes.length || 0} nodes`);
  * }
  */
 export async function listWorkspaces(orgId?: string): Promise<Workspace[]> {
@@ -140,7 +149,7 @@ export async function createWorkspace(name: string, orgId?: string): Promise<str
  *
  * @example
  * const workspace = await getWorkspace(workspaceId);
- * console.log(`Canvas has ${workspace.canvas?.elements.length} elements`);
+ * console.log(`Canvas has ${workspace.canvas?.nodes.length} nodes`);
  */
 export async function getWorkspace(workspaceId: string): Promise<Workspace | null> {
   try {
@@ -199,8 +208,8 @@ export async function deleteWorkspace(workspaceId: string): Promise<void> {
  *
  * @example
  * const canvas = await getCanvas(workspaceId);
- * for (const el of canvas?.elements || []) {
- *   console.log(`${el.data.nodeType}: ${el.data.label}`);
+ * for (const node of canvas?.nodes || []) {
+ *   console.log(`${node.type}: ${node.data.label}`);
  * }
  */
 export async function getCanvas(workspaceId: string): Promise<CanvasState | null> {
@@ -226,9 +235,10 @@ export async function getCanvas(workspaceId: string): Promise<CanvasState | null
  * @example
  * await saveCanvas(workspaceId, {
  *   version: '1.0',
- *   elements: [...],
- *   connections: [],
- *   viewport: { offset: { x: 0, y: 0 }, zoom: 1 }
+ *   nodes: [...],
+ *   edges: [],
+ *   zoom: 1,
+ *   translation: { x: 0, y: 0 }
  * });
  */
 export async function saveCanvas(workspaceId: string, canvas: CanvasState): Promise<void> {
@@ -248,37 +258,40 @@ export async function saveCanvas(workspaceId: string, canvas: CanvasState): Prom
  * @returns The element ID
  *
  * @example
- * const elementId = await addCanvasElement(workspaceId, {
+ * const nodeId = await addCanvasElement(workspaceId, {
  *   id: crypto.randomUUID(),
  *   position: { x: 100, y: 100 },
- *   size: { width: 400, height: 300 },
+ *   type: 'frame',
  *   data: {
- *     nodeType: 'frame',
- *     label: 'Hero Section',
+ *     name: 'Hero Section',
+ *     width: 400,
+ *     height: 300,
  *     frameId: 'frame-123'
  *   }
  * });
  */
 export async function addCanvasElement(
   workspaceId: string,
-  element: CanvasElement
+  element: CanvasNode
 ): Promise<string> {
-  // Get current canvas
+  // Get current canvas (uses nodes/edges format from database)
   const canvas = await getCanvas(workspaceId) || {
     version: "1.0",
-    elements: [],
-    connections: [],
-    viewport: { offset: { x: 0, y: 0 }, zoom: 1 },
+    nodes: [],
+    edges: [],
+    markers: [],
+    zoom: 1,
+    translation: { x: 0, y: 0 },
   };
 
-  // Add element
-  const elementId = element.id || crypto.randomUUID();
-  canvas.elements.push({ ...element, id: elementId });
+  // Add node
+  const nodeId = element.id || crypto.randomUUID();
+  canvas.nodes.push({ ...element, id: nodeId });
 
   // Save updated canvas
   await saveCanvas(workspaceId, canvas);
 
-  return elementId;
+  return nodeId;
 }
 
 /**
@@ -297,8 +310,8 @@ export async function removeCanvasElement(
   const canvas = await getCanvas(workspaceId);
   if (!canvas) return;
 
-  canvas.elements = canvas.elements.filter((el) => el.id !== elementId);
-  canvas.connections = canvas.connections.filter(
+  canvas.nodes = canvas.nodes.filter((el) => el.id !== elementId);
+  canvas.edges = canvas.edges.filter(
     (c) => c.source !== elementId && c.target !== elementId
   );
 
@@ -321,24 +334,20 @@ export async function removeCanvasElement(
 export async function updateCanvasElement(
   workspaceId: string,
   elementId: string,
-  updates: Partial<CanvasElement>
+  updates: Partial<CanvasNode>
 ): Promise<void> {
   const canvas = await getCanvas(workspaceId);
   if (!canvas) return;
 
-  const index = canvas.elements.findIndex((el) => el.id === elementId);
+  const index = canvas.nodes.findIndex((el) => el.id === elementId);
   if (index === -1) return;
 
-  canvas.elements[index] = {
-    ...canvas.elements[index],
+  canvas.nodes[index] = {
+    ...canvas.nodes[index],
     ...updates,
     data: {
-      ...canvas.elements[index].data,
+      ...canvas.nodes[index].data,
       ...updates.data,
-    },
-    style: {
-      ...canvas.elements[index].style,
-      ...updates.style,
     },
   };
 
@@ -361,17 +370,17 @@ export async function updateCanvasElement(
  */
 export async function addConnection(
   workspaceId: string,
-  connection: Connection
+  connection: Edge
 ): Promise<string> {
   const canvas = await getCanvas(workspaceId);
   if (!canvas) throw new Error("Canvas not found");
 
-  const connectionId = connection.id || crypto.randomUUID();
-  canvas.connections.push({ ...connection, id: connectionId });
+  const edgeId = connection.id || crypto.randomUUID();
+  canvas.edges.push({ ...connection, id: edgeId });
 
   await saveCanvas(workspaceId, canvas);
 
-  return connectionId;
+  return edgeId;
 }
 
 /**
