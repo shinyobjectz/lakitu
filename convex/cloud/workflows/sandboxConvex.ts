@@ -285,23 +285,64 @@ export const getActiveSessionForThread = query({
             .order("asc")
             .take(500);
 
-        // Parse logs - return structured format
-        const logs = rawLogs.map((l) => {
-            // Try to parse as JSON (structured log)
-            if (l.stepType) {
-                try {
-                    return JSON.parse(l.message);
-                } catch {
-                    return { type: "text", label: l.message };
+        // Patterns that indicate raw console/code output (filter these out)
+        const rawPatterns = [
+            /^\d+\s*\|/, // Line numbers like "42 |"
+            /JSON\.stringify|JSON\.parse/, // Code snippets
+            /\.(ts|js|json|svelte):\d+/, // File:line references
+            /at\s+\w+\s+\(/, // Stack traces
+            /Error:|Exception:|throw\s+new/, // Error traces
+            /Task IDs:|task-\d+/, // Internal task IDs
+            /Bun v\d+|Node v\d+/, // Runtime info
+            /Local Convex (error|exception)/i, // Internal Convex errors
+            /body:\s*JSON|response\.(status|text)/, // HTTP code
+            /await\s+\w+|async\s+function/, // Async code
+            /^\[.*\]$/, // Bracketed debug prefixes like [agentThread]
+        ];
+
+        // Valid log types to show in UI
+        const validTypes = ['plan', 'thinking', 'task', 'search', 'source', 'file', 'tool', 'text', 'error'];
+
+        // Parse and filter logs
+        const logs = rawLogs
+            .map((l) => {
+                // Try to parse as JSON (structured log)
+                if (l.stepType) {
+                    try {
+                        return JSON.parse(l.message);
+                    } catch {
+                        return { type: l.stepType || "text", label: l.message };
+                    }
                 }
-            }
-            // Plain string log - wrap in basic structure
-            return { type: "text", label: l.message };
-        });
+                // Plain string log - infer type from emoji/content
+                const msg = l.message;
+                let type = "text";
+                if (msg.startsWith("🚀") || msg.startsWith("📦") || msg.startsWith("🤖") || msg.startsWith("✅") || msg.startsWith("🎯")) {
+                    type = "task";
+                } else if (msg.startsWith("🔒") || msg.startsWith("📋")) {
+                    type = "tool";
+                } else if (msg.startsWith("❌") || msg.startsWith("⏱️")) {
+                    type = "error";
+                }
+                return { type, label: msg };
+            })
+            .filter((log) => {
+                // Must have valid type and label
+                if (!log.type || !log.label) return false;
+                if (!validTypes.includes(log.type)) return false;
+                
+                // Filter out raw console/code output
+                const label = log.label;
+                for (const pattern of rawPatterns) {
+                    if (pattern.test(label)) return false;
+                }
+                
+                return true;
+            });
 
         return {
             ...sessionToUse,
-            logs, // Now returns array of structured objects
+            logs, // Pre-filtered, ready for display
         };
     },
 });

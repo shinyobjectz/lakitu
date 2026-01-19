@@ -144,7 +144,7 @@ export async function callGatewayBatch<T extends unknown[] = unknown[]>(
  *
  * @example
  * // Log something without blocking
- * fireAndForget('agent.workflows.sandboxConvex.appendLogs', { sessionId, logs });
+ * fireAndForget('components.lakitu.workflows.sandboxConvex.appendLogs', { sessionId, logs });
  */
 export function fireAndForget(
   path: string,

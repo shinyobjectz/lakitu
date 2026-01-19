@@ -82,7 +82,7 @@ async function forwardLogToCloud(log: StructuredLog): Promise<void> {
         Authorization: `Bearer ${gatewayConfig.jwt}`,
       },
       body: JSON.stringify({
-        path: "agent.workflows.sandboxConvex.appendLogs",
+        path: "components.lakitu.workflows.sandboxConvex.appendLogs",
         type: "mutation",
         args: {
           sessionId,

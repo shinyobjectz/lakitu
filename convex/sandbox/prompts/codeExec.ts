@@ -5,6 +5,8 @@
  * The agent writes TypeScript code that imports from KSAs (Knowledge, Skills, Abilities).
  */
 
+import { KSA_KNOWLEDGE, buildPrioritySystemPrompts } from "../../../shared/ksaKnowledge";
+
 // KSA registry info (inlined to avoid importing Node.js modules that Convex can't bundle)
 const CORE_KSAS = ["file", "context", "artifacts", "beads"];
 const ALL_KSA_NAMES = [
@@ -647,13 +649,21 @@ function generateIntentSchemaGuidance(schema: IntentSchema): string {
     lines.push("");
   }
 
-  // Priority KSAs
+  // Priority KSAs with their SYSTEM prompts
   if (schema.ksas.priority.length > 0) {
     lines.push(
       `**Priority KSAs (Import First):** ${schema.ksas.priority.join(", ")}`
     );
     lines.push(`> *${schema.ksas.reasoning}*`);
     lines.push("");
+    
+    // Inject SYSTEM prompts for priority KSAs
+    const systemPrompts = buildPrioritySystemPrompts(schema.ksas.priority);
+    if (systemPrompts) {
+      lines.push("**KSA-Specific Instructions:**");
+      lines.push(systemPrompts);
+      lines.push("");
+    }
   }
 
   // Goals
@@ -668,6 +678,14 @@ function generateIntentSchemaGuidance(schema: IntentSchema): string {
           : "🟢";
       lines.push(`${importance} ${goal.text}`);
     }
+    lines.push("");
+    
+    // Reference pre-created beads
+    lines.push("**Task Tracking (Pre-Created):**");
+    lines.push("Tasks have been pre-created in beads from these goals. Use:");
+    lines.push("- `beads.list()` to see your task list");
+    lines.push("- `beads.update(id, { status: 'in_progress' })` when starting a task");
+    lines.push("- `beads.close(id)` when complete");
     lines.push("");
   }
 

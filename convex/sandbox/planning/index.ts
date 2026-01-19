@@ -6,3 +6,4 @@
 
 export * as beads from "./beads";
 export * as sync from "./sync";
+export { bootstrapFromIntentSchema, type BootstrapResult } from "./bootstrap";

@@ -67,7 +67,8 @@ async function emitProgress(
         Authorization: `Bearer ${jwt}`,
       },
       body: JSON.stringify({
-        path: "agent.workflows.crudThreads.emitSubagentProgress",
+        path: "components.lakitu.workflows.crudThreads.emitSubagentProgress",
+        type: "mutation",
         args: {
           threadId: parentThreadId,
           subagentId,

@@ -26,6 +26,10 @@ export interface KSAInfo {
   servicePaths: string[];
   isLocal: boolean;
   icon?: string;
+  /** System prompt added to agent when this KSA is prioritized */
+  system?: string;
+  /** Detailed usage info for intent schema analysis */
+  about?: string;
 }
 
 // ============================================================================

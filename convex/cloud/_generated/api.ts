@@ -12,6 +12,7 @@ import type * as index from "../index.js";
 import type * as intentSchema_generate from "../intentSchema/generate.js";
 import type * as intentSchema_index from "../intentSchema/index.js";
 import type * as intentSchema_types from "../intentSchema/types.js";
+import type * as ksaKnowledge from "../ksaKnowledge.js";
 import type * as ksaPolicy from "../ksaPolicy.js";
 import type * as mail from "../mail.js";
 import type * as utils_kanbanContext from "../utils/kanbanContext.js";
@@ -39,6 +40,7 @@ const fullApi: ApiFromModules<{
   "intentSchema/generate": typeof intentSchema_generate;
   "intentSchema/index": typeof intentSchema_index;
   "intentSchema/types": typeof intentSchema_types;
+  ksaKnowledge: typeof ksaKnowledge;
   ksaPolicy: typeof ksaPolicy;
   mail: typeof mail;
   "utils/kanbanContext": typeof utils_kanbanContext;

@@ -73,20 +73,31 @@ This ensures we're always using the published version, catching issues before us
 
 ## ⚠️ CRITICAL: Sandbox Rebuild Required After Changes
 
-**Any changes to files in `packages/lakitu/` require a sandbox rebuild!**
+**Any changes to KSA files require a sandbox rebuild!**
 
 The agent code runs inside an E2B sandbox template. Your changes are NOT automatically deployed - you must rebuild the template for changes to take effect.
+
+### TWO KSA Locations (IMPORTANT!)
+
+There are **TWO** places where KSAs are defined:
+
+| Location | Purpose | When to Use |
+|----------|---------|-------------|
+| **`/project.social/lakitu/*.ts`** | **Project-specific KSAs** - canvas, context, history, brandLibrary, etc. | Most new KSAs go here |
+| `packages/lakitu/ksa/*.ts` | Core SDK KSAs - file, browser (shared across projects) | Rarely - only for SDK-level changes |
+
+**Both locations are merged into the sandbox at build time.** The build script copies project KSAs into the sandbox alongside SDK KSAs.
 
 ### Files That Require Rebuild
 
 | Path | What It Contains |
 |------|------------------|
-| `ksa/*.ts` | KSA modules (brandLibrary, frames, artifacts, etc.) |
-| `ksa/_shared/*.ts` | Gateway, config readers |
-| `ksa/_generated/*.ts` | Registry, reference docs |
-| `runtime/*.ts` | CLI commands |
-| `template/*.ts` | Template builder |
-| `loro/*.ts` | CRDT utilities (LoroFS, LoroBeads) |
+| `/project.social/lakitu/*.ts` | **Project KSAs** (canvas, context, history, brands, etc.) |
+| `packages/lakitu/ksa/*.ts` | SDK KSAs (file, browser) |
+| `packages/lakitu/ksa/_shared/*.ts` | Gateway, config readers |
+| `packages/lakitu/runtime/*.ts` | CLI commands |
+| `packages/lakitu/template/*.ts` | Template builder |
+| `packages/lakitu/loro/*.ts` | CRDT utilities (LoroFS, LoroBeads) |
 
 ### Rebuild Commands
 

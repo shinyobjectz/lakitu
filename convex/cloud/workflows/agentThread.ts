@@ -44,6 +44,7 @@ export const sendMessage = action({
     const threads = await ctx.runQuery(api.workflows.crudThreads.listThreads, {
       userId: args.userId,
     });
+    
     const thisThread = threads.find((t: Doc<"threads">) => t._id === args.threadId);
     if (!thisThread) throw new Error("Thread not found or unauthorized");
 
@@ -67,9 +68,44 @@ export const sendMessage = action({
       .map((m: Doc<"threadMessages">) => `${m.role}: ${m.content}`)
       .join('\n\n');
 
-    // Build system prompt based on skills
+    // Build system prompt based on skills and context
     let systemPrompt = "You are a helpful AI assistant.";
     let tools: string[] = ["vfs"];
+
+    // Add workspace context if this thread is in a workspace
+    if (thisThread.workspaceId) {
+      systemPrompt += `
+
+## Workspace Context
+You are working within a visual workspace. Your job is to CREATE deliverables, not just describe them.
+
+### Knowledge KSA (import * as knowledge from './ksa/knowledge')
+Access contextual intelligence about your environment:
+- knowledge.getContext() - Get full brand + workspace context  
+- knowledge.getBrandColors() - Get brand color palette (if brand associated)
+- knowledge.getBrandVoice() - Get tone/style guidelines
+- knowledge.getAdSpecs('meta') - Get ad dimensions for platforms
+- knowledge.getDesignPattern('hero') - Get design best practices
+
+The Knowledge KSA automatically detects brand context from the workspace. Always call knowledge.getContext() at the start of creative tasks.
+
+### Frames KSA (import * as frames from './ksa/frames')
+Create visual components like ads, landing sections, and UI elements:
+- frames.create({ name, code, codeType, width, height }) - Create HTML/Tailwind components
+- frames.list() - List existing frames in this workspace
+
+### Canvas KSA (import * as canvas from './ksa/canvas')  
+Manage the workspace's visual canvas:
+- canvas.load() - Load the current canvas state
+- canvas.frame(id, opts) - Create a frame element on canvas
+- ws.add(element), ws.save() - Add elements and persist
+
+**IMPORTANT**: When the user asks for visual content, ads, designs, or UI components:
+1. Use knowledge.getAdSpecs() to get correct dimensions
+2. Use brand colors/voice from knowledge if available
+3. Call frames.create() to actually build the component
+4. Don't just describe what you would create - CREATE IT`;
+    }
 
     if (args.skillIds?.length) {
       const skills = await ctx.runQuery(api.workflows.crudSkills.getByIds, {
@@ -142,8 +178,11 @@ export const sendMessage = action({
           : undefined; // undefined = all KSAs allowed
 
       // Start Lakitu sandbox session with user context and intent schema
+      const sessionProjectId = `thread-${args.threadId}`;
+      console.log(`[agentThread:sendMessage] Starting session with projectId=${sessionProjectId}`);
+      
       const result = await ctx.runAction(api.workflows.sandboxConvex.startSession, {
-        projectId: `thread-${args.threadId}`,
+        projectId: sessionProjectId,
         prompt: fullPrompt,
         config: {
           tools,
@@ -163,6 +202,8 @@ export const sendMessage = action({
           }),
         },
       });
+      
+      console.log(`[agentThread:sendMessage] Session started: success=${result.success}, sessionId=${result.sessionId}`);
 
       if (!result.success) {
         return { success: false, error: result.error || "Failed to start session" };

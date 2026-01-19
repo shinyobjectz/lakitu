@@ -190,6 +190,11 @@ const baseTemplate = Template()
     mkdir -p /home/user/workspace /home/user/.convex/convex-backend-state/lakitu /home/user/artifacts && \
     chown -R user:user /home/user
   `)
+  // Install crawl4ai for web scraping with residential proxy support
+  .runCmd(`
+    pip3 install crawl4ai && \
+    crawl4ai-setup --no-browsers
+  `)
   .setEnvs({
     HOME: "/home/user",
     PATH: "/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin",

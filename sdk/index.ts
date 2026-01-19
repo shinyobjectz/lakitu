@@ -83,3 +83,16 @@ export {
   createRegistry,
   getFunction,
 } from "./builders";
+
+// ============================================================================
+// Primitives (local sandbox operations)
+// ============================================================================
+
+export {
+  file,
+  shell,
+  browser,
+  getPrimitive,
+  hasPrimitive,
+  PRIMITIVES,
+} from "./primitives";

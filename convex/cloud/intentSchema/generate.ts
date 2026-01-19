@@ -23,6 +23,7 @@ import {
   CORE_KSAS,
   type KSAInfo,
 } from "../ksaPolicy";
+import { KSA_KNOWLEDGE, buildKsaAboutSummary } from "../../../shared/ksaKnowledge";
 
 // ============================================================================
 // Configuration
@@ -65,8 +66,11 @@ function buildKSARegistrySummary(): string {
   if (core.length > 0) {
     lines.push("## Core KSAs (Always Available)");
     for (const k of core) {
+      const about = KSA_KNOWLEDGE[k.name]?.about;
       lines.push(`- **${k.name}**: ${k.description}`);
-      lines.push(`  Functions: ${k.functions.slice(0, 4).join(", ")}${k.functions.length > 4 ? "..." : ""}`);
+      if (about) {
+        lines.push(`  ${about.split('\n')[0]}`); // First line of ABOUT
+      }
     }
     lines.push("");
   }
@@ -74,11 +78,13 @@ function buildKSARegistrySummary(): string {
   // Skills KSAs
   const skills = byCategory.get("skills") || [];
   if (skills.length > 0) {
-    lines.push("## Skills KSAs (Research & Data)");
+    lines.push("## Skills KSAs (Research & Visual)");
     for (const k of skills) {
-      const group = k.group ? ` [${k.group}]` : "";
-      lines.push(`- **${k.name}**${group}: ${k.description}`);
-      lines.push(`  Functions: ${k.functions.slice(0, 4).join(", ")}${k.functions.length > 4 ? "..." : ""}`);
+      const about = KSA_KNOWLEDGE[k.name]?.about;
+      lines.push(`- **${k.name}**: ${k.description}`);
+      if (about) {
+        lines.push(`  ${about.split('\n')[0]}`); // First line of ABOUT
+      }
     }
     lines.push("");
   }
@@ -88,11 +94,18 @@ function buildKSARegistrySummary(): string {
   if (deliverables.length > 0) {
     lines.push("## Deliverables KSAs (Output Formats)");
     for (const k of deliverables) {
+      const about = KSA_KNOWLEDGE[k.name]?.about;
       lines.push(`- **${k.name}**: ${k.description}`);
-      lines.push(`  Functions: ${k.functions.join(", ")}`);
+      if (about) {
+        lines.push(`  ${about.split('\n')[0]}`); // First line of ABOUT
+      }
     }
     lines.push("");
   }
+
+  // Add detailed ABOUT for key KSAs
+  lines.push("## Detailed KSA Usage Guidelines");
+  lines.push(buildKsaAboutSummary(["canvas", "frames", "workspaces", "artifacts"]));
 
   return lines.join("\n");
 }

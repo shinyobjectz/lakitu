@@ -556,6 +556,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           any,
           Name
         >;
+        getThreadBrandContext: FunctionReference<
+          "query",
+          "internal",
+          { threadId: string },
+          any,
+          Name
+        >;
         getThreadMessages: FunctionReference<
           "query",
           "internal",

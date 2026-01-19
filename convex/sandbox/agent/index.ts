@@ -16,6 +16,7 @@ import { api, internal } from "../_generated/api";
 import { v } from "convex/values";
 import type { ChainOfThoughtStep, StepStatus } from "../../../shared/chain-of-thought";
 import { createStepId, getStepTypeForTool } from "../../../shared/chain-of-thought";
+import { bootstrapFromIntentSchema } from "../planning/bootstrap";
 // Note: Zod 4 has native toJSONSchema() - don't need zod-to-json-schema
 
 // Default model - used as fallback if no model passed via context
@@ -474,6 +475,24 @@ export const startCodeExecThread = action({
       reasoning: "Using code execution mode - agent will write and execute TypeScript",
       expectedOutcome: "Agent will generate code that imports from skills/",
     });
+
+    // Bootstrap beads from intent schema if present (creates task list from goals)
+    let bootstrappedTasks: { epicId: string; taskIds: string[] } | null = null;
+    if (ctxObj.intentSchema?.plan?.goals?.length > 0) {
+      try {
+        bootstrappedTasks = await bootstrapFromIntentSchema(
+          ctx,
+          ctxObj.intentSchema,
+          threadId
+        );
+        console.log(
+          `[startCodeExecThread] Bootstrapped ${bootstrappedTasks.taskIds.length} tasks from intent schema`
+        );
+      } catch (e) {
+        console.warn(`[startCodeExecThread] Failed to bootstrap beads: ${e}`);
+        // Continue without bootstrapped tasks - agent can still work
+      }
+    }
 
     // Generate KSA instructions from skill configs (if any)
     const ksaInstructions = ctxObj.skillConfigs

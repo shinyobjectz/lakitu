@@ -104,6 +104,23 @@ export const listWorkspaceThreads = query({
   },
 });
 
+/** Get brand context for a thread (via workspace association) */
+export const getThreadBrandContext = query({
+  args: { threadId: v.id("threads") },
+  handler: async (ctx, args) => {
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread?.workspaceId) return null;
+
+    // Note: This query runs in the component context, so we can't directly
+    // access the main app's workspace/brand tables. Return what we have.
+    // The main app should pass brand context via sandboxConfig.
+    return {
+      workspaceId: thread.workspaceId,
+      // Brand context should be passed from main app - we just return workspace info
+    };
+  },
+});
+
 /** Get messages in a thread */
 export const getThreadMessages = query({
   args: { threadId: v.id("threads"), userId: v.string() },
