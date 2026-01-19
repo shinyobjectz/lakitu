@@ -42,7 +42,7 @@ import { localDb } from "@lakitu/sdk/ksa/localDb";
  */
 export async function greet(name: string): Promise<string> {
   const result = await callGateway("myService.greet", { name });
-  return (result as any)?.message || \`Hello, \${name}!\`;
+  return (result as any)?.message || "Hello, " + name + "!";
 }
 
 /**
@@ -74,7 +74,7 @@ export async function init(options: InitOptions) {
 
   // Check if convex directory exists
   if (!existsSync(convexDir)) {
-    console.error(\`❌ Convex directory not found: \${convexDir}\`);
+    console.error(`❌ Convex directory not found: ${convexDir}`);
     console.log("   Run this command from a Convex project root.");
     process.exit(1);
   }
@@ -90,10 +90,10 @@ export async function init(options: InitOptions) {
       const pm = useBun ? "bun" : usePnpm ? "pnpm" : useYarn ? "yarn" : "npm";
       const addCmd = pm === "yarn" ? "add" : "install";
 
-      execSync(\`\${pm} \${addCmd} @lakitu/sdk\`, { stdio: "inherit" });
-      console.log("   ✓ Installed\\n");
+      execSync(`${pm} ${addCmd} @lakitu/sdk`, { stdio: "inherit" });
+      console.log("   ✓ Installed\n");
     } catch (error) {
-      console.warn("   ⚠ Could not auto-install. Run: npm install @lakitu/sdk\\n");
+      console.warn("   ⚠ Could not auto-install. Run: npm install @lakitu/sdk\n");
     }
   }
 
@@ -101,7 +101,7 @@ export async function init(options: InitOptions) {
   const lakituDir = join(cwd, "lakitu");
   if (!existsSync(lakituDir)) {
     mkdirSync(lakituDir, { recursive: true });
-    console.log("📁 Created lakitu/ directory\\n");
+    console.log("📁 Created lakitu/ directory\n");
   }
 
   // Step 3: Create example KSA
@@ -109,7 +109,7 @@ export async function init(options: InitOptions) {
   if (!existsSync(examplePath)) {
     console.log("📝 Creating example KSA...");
     writeFileSync(examplePath, EXAMPLE_KSA);
-    console.log("   ✓ Created lakitu/example.ts\\n");
+    console.log("   ✓ Created lakitu/example.ts\n");
   }
 
   // Step 4: Check convex.config.ts
@@ -117,14 +117,14 @@ export async function init(options: InitOptions) {
   if (existsSync(convexConfigPath)) {
     const content = readFileSync(convexConfigPath, "utf-8");
     if (!content.includes("@lakitu/sdk")) {
-      console.log("📝 Add this to your convex.config.ts:\\n");
-      console.log("   " + CONVEX_CONFIG_ADDITION.trim().split("\\n").join("\\n   "));
+      console.log("📝 Add this to your convex.config.ts:\n");
+      console.log("   " + CONVEX_CONFIG_ADDITION.trim().split("\n").join("\n   "));
       console.log("");
     }
   }
 
   // Done
-  console.log("✅ Lakitu initialized!\\n");
+  console.log("✅ Lakitu initialized!\n");
   console.log("Next steps:");
   console.log("  1. Add lakitu component to convex.config.ts (see above)");
   console.log("  2. Create KSAs in lakitu/ as simple TypeScript functions");
@@ -132,5 +132,5 @@ export async function init(options: InitOptions) {
   console.log("  4. Publish to E2B: npx lakitu publish");
   console.log("");
   console.log("KSA files are plain TypeScript - import from './ksa/yourfile'");
-  console.log("in your agent code.\\n");
+  console.log("in your agent code.\n");
 }
