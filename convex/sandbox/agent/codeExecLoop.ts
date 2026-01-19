@@ -469,10 +469,12 @@ export async function runCodeExecLoop(
           code,
           timeoutMs: 60_000,
           env: {
-            // KSAs use both CONVEX_URL and GATEWAY_URL - provide both for compatibility
+            // CONVEX_URL and GATEWAY_URL point to cloud for gateway calls
             CONVEX_URL: gatewayConfig.convexUrl,
             GATEWAY_URL: gatewayConfig.convexUrl,
             SANDBOX_JWT: gatewayConfig.jwt,
+            // LOCAL_CONVEX_URL points to sandbox-local Convex (for subagents, localDb, etc.)
+            LOCAL_CONVEX_URL: "http://localhost:3210",
             ...(cardId && { CARD_ID: cardId }),
             // Pass cloud thread ID for artifact uploads (NOT the sandbox-local threadId)
             ...(cloudThreadId && { THREAD_ID: cloudThreadId }),

@@ -50,7 +50,8 @@ function loadEnvFile(): Record<string, string> {
 const envFile = loadEnvFile();
 
 // Local Convex URL (sandbox backend, NOT cloud gateway)
-const LOCAL_CONVEX_URL = process.env.CONVEX_URL || envFile.CONVEX_URL || "http://localhost:3210";
+// Use LOCAL_CONVEX_URL first since CONVEX_URL may point to cloud gateway
+const LOCAL_CONVEX_URL = process.env.LOCAL_CONVEX_URL || envFile.LOCAL_CONVEX_URL || "http://localhost:3210";
 
 // Session identifiers
 export const SESSION_ID = process.env.SESSION_ID || envFile.SESSION_ID || `session_${Date.now()}`;

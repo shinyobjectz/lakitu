@@ -63,6 +63,7 @@ RUN chown -R user:user /home/user/.convex
 ENV HOME=/home/user
 ENV PATH="/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin"
 ENV CONVEX_URL="http://localhost:3210"
+ENV LOCAL_CONVEX_URL="http://localhost:3210"
 ENV CONVEX_LOCAL_STORAGE="/home/user/.convex/convex-backend-state/lakitu"
 
 USER user

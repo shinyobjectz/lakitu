@@ -3,6 +3,74 @@
 > **AUDIENCE**: This document is for YOU, the AI agent (Claude Code, Cursor, etc.) working on this codebase.
 > Read this BEFORE writing any code.
 
+## Package Structure & Git Workflow
+
+**Lakitu is a git submodule AND an npm package.** Understanding this is critical.
+
+```
+project.social/
+├── packages/lakitu/          # ← Git SUBMODULE (separate repo)
+│   ├── .git/                 #   Has its own git history
+│   ├── package.json          #   Published as @lakitu/sdk
+│   └── .github/workflows/    #   Auto-publishes to npm
+└── .gitmodules               # ← References packages/lakitu
+```
+
+### Git Workflow for Lakitu Changes
+
+```bash
+# 1. Make changes in packages/lakitu/
+cd packages/lakitu
+# edit files...
+
+# 2. Commit to the SUBMODULE (not parent repo)
+git add -A
+git commit -m "feat: add new KSA"
+
+# 3. Push SUBMODULE to its remote (triggers npm publish if version bumped)
+git push origin main
+
+# 4. Go back to parent repo and update submodule reference
+cd ../..
+git add packages/lakitu
+git commit -m "chore: update lakitu submodule"
+git push
+
+# 5. Rebuild sandbox template to use new code
+bun sandbox:custom
+```
+
+### NPM Publish Workflow
+
+The `@lakitu/sdk` package publishes automatically via GitHub Actions:
+
+1. **Trigger**: Push to `packages/lakitu` with version bump in `package.json`
+2. **Action**: `.github/workflows/publish.yml` builds and publishes
+3. **Check**: `npm view @lakitu/sdk version` to verify
+
+To bump version:
+```bash
+cd packages/lakitu
+# Edit package.json version (e.g., 0.1.17 → 0.1.18)
+git add package.json && git commit -m "chore: bump version"
+git push origin main  # Triggers npm publish
+```
+
+### Dogfooding in project.social
+
+The parent app uses `@lakitu/sdk` from npm (not the local submodule) for CLI commands:
+
+```json
+// package.json scripts
+"sandbox": "npx @lakitu/sdk -- build",
+"sandbox:base": "npx @lakitu/sdk -- build --base",
+"sandbox:custom": "npx @lakitu/sdk -- build --custom"
+```
+
+This ensures we're always using the published version, catching issues before users do.
+
+---
+
 ## ⚠️ CRITICAL: Sandbox Rebuild Required After Changes
 
 **Any changes to files in `packages/lakitu/` require a sandbox rebuild!**
@@ -18,6 +86,7 @@ The agent code runs inside an E2B sandbox template. Your changes are NOT automat
 | `ksa/_generated/*.ts` | Registry, reference docs |
 | `runtime/*.ts` | CLI commands |
 | `template/*.ts` | Template builder |
+| `loro/*.ts` | CRDT utilities (LoroFS, LoroBeads) |
 
 ### Rebuild Commands
 
@@ -127,21 +196,30 @@ for (const code of codeBlocks) {
 ```
 packages/lakitu/
 ├── ksa/                    # ✅ KSA MODULES (Knowledge, Skills, Abilities)
+│   ├── _shared/            #    Gateway, localDb, config
 │   ├── web.ts              #    Agent imports: from './ksa/web'
 │   ├── file.ts
 │   ├── pdf.ts
 │   ├── beads.ts
 │   └── browser.ts
 │
-├── convex/tools/           # ⚠️  LEGACY: Being removed - DO NOT USE
-│   └── *.ts                #    These are old tool() definitions
+├── loro/                   # ✅ CRDT utilities for persistence
+│   ├── fs.ts               #    LoroFS - workspace filesystem tree
+│   ├── beads.ts            #    LoroBeads - task tracking CRDT
+│   └── index.ts            #    Exports: @lakitu/sdk/loro
 │
-├── convex/agent/           # Agent loop implementation
-│   ├── index.ts            #    Legacy loop (tool calling)
-│   └── codeExecLoop.ts     #    ✅ New loop (code execution)
+├── convex/                 # Sandbox-local Convex backend
+│   ├── cloud/              #    Cloud orchestration (lifecycleSandbox)
+│   └── tools/              #    ⚠️ LEGACY - being removed
 │
-└── runtime/                # CLI commands for bash
-    └── generate-pdf        #    Called via: bash: generate-pdf "name"
+├── runtime/                # CLI commands for bash
+│   └── generate-pdf        #    Called via: bash: generate-pdf "name"
+│
+├── template/               # E2B sandbox template builder
+│   └── build.ts            #    Run: bun sandbox:custom
+│
+└── .github/workflows/      # CI/CD
+    └── publish.yml         #    Auto-publish to npm on version bump
 ```
 
 ## When Adding New Capabilities
@@ -218,32 +296,36 @@ await llm.chat({ tools: [...] });
 5. **Debuggable** - You can read exactly what code ran
 6. **Extensible** - Add KSAs by adding TypeScript files
 
-## Migration Status
-
-The codebase is transitioning from JSON tool calls to code execution:
-
-- [x] Created `ksa/` directory with KSA modules
-- [x] Created `ksa/web.ts`, `ksa/file.ts`, `ksa/pdf.ts`, `ksa/beads.ts`, `ksa/browser.ts`
-- [x] Created `convex/actions/codeExec.ts` - Code execution runtime
-- [x] Created `convex/agent/codeExecLoop.ts` - New agent loop (no tool schemas)
-- [x] Created `convex/prompts/codeExec.ts` - System prompt for code execution
-- [x] Added `startCodeExecThread` action to agent index
-- [ ] Switch cloud orchestrator to use `startCodeExecThread` instead of `startThread`
-- [ ] Update E2B template to copy `ksa/` to `/home/user/ksa/`
-- [ ] Test code execution end-to-end
-- [ ] Remove legacy `convex/tools/*.ts` and `createAllTools()` pattern
-
 ## Quick Reference
 
 | Task | Do This | NOT This |
 |------|---------|----------|
 | Add capability | `ksa/mycap.ts` with export function | `convex/tools/` with tool() |
 | Add CLI command | `runtime/cmd` + bash | New tool() definition |
-| Call LLM | `await llm.chat({ messages })` | `await llm.chat({ messages, tools })` |
-| Parse response | Extract code blocks, execute | Parse tool_calls JSON |
+| Add CRDT util | `loro/mycap.ts` | Separate package |
+| Update submodule | `cd packages/lakitu && git commit && git push` | Edit from parent |
+| Bump version | Edit `package.json` version, push | Manual npm publish |
+| Rebuild sandbox | `bun sandbox:custom` from project root | Forget to rebuild |
+
+## Common Operations
+
+```bash
+# Check current npm version
+npm view @lakitu/sdk version
+
+# See what's in the submodule
+cd packages/lakitu && git log --oneline -5
+
+# Update submodule to latest
+cd packages/lakitu && git pull origin main
+cd ../.. && git add packages/lakitu && git commit -m "chore: update lakitu"
+
+# Rebuild sandbox after changes
+bun sandbox:custom
+```
 
 ## See Also
 
-- `ARCHITECTURE.md` - Detailed architecture explanation
 - `ksa/README.md` - KSA documentation and examples
-- `ksa/*.ts` - KSA implementations
+- `loro/index.ts` - CRDT exports (LoroFS, LoroBeads)
+- `.github/workflows/publish.yml` - NPM publish automation

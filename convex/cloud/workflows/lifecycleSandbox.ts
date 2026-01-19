@@ -1342,14 +1342,71 @@ export const pollSandboxCompletion = internalAction({
         logs: [`⏱️ EXECUTION: ${(totalExecutionMs / 1000).toFixed(1)}s (${args.pollCount} polls, ${toolCalls.length} tools)`],
       });
 
-      // Kill the sandbox
-      try {
-        const { Sandbox } = await import("@e2b/code-interpreter");
-        const sandbox = await Sandbox.connect(args.sandboxId);
-        await sandbox.kill();
-        console.log(`[Sandbox] Killed sandbox ${args.sandboxId}`);
-      } catch (e) {
-        console.log(`[Sandbox] Failed to kill sandbox (may already be dead): ${e}`);
+      // Capture workspace files before killing sandbox
+      if (args.cardId && diffs.length > 0) {
+        try {
+          const { Sandbox } = await import("@e2b/code-interpreter");
+          const sandbox = await Sandbox.connect(args.sandboxId);
+          
+          const filesToSync: Array<{ path: string; name: string; content: string; type: string }> = [];
+          
+          for (const diff of diffs) {
+            const filePath = diff.path || diff;
+            if (!filePath || typeof filePath !== "string") continue;
+            
+            try {
+              // Read file content from sandbox
+              const result = await sandbox.commands.run(`cat "${filePath}" 2>/dev/null || echo ""`);
+              const content = result.stdout || "";
+              if (!content) continue;
+              
+              // Determine file type from extension
+              const ext = filePath.split(".").pop()?.toLowerCase() || "";
+              const typeMap: Record<string, string> = {
+                ts: "code", js: "code", tsx: "code", jsx: "code",
+                py: "code", rs: "code", go: "code", java: "code",
+                json: "json", yaml: "json", yml: "json",
+                md: "markdown", mdx: "markdown",
+                html: "html", css: "code", scss: "code",
+                txt: "text", csv: "csv",
+              };
+              
+              filesToSync.push({
+                path: filePath,
+                name: filePath.split("/").pop() || "file",
+                content,
+                type: typeMap[ext] || "text",
+              });
+            } catch {
+              // Skip files that can't be read
+            }
+          }
+          
+          if (filesToSync.length > 0) {
+            console.log(`[Sandbox] 📦 Capturing ${filesToSync.length} workspace files...`);
+            await ctx.runMutation(api.features.kanban.file_sync.batchFileSync, {
+              cardId: args.cardId as any,
+              files: filesToSync,
+            });
+            console.log(`[Sandbox] ✅ Workspace captured`);
+          }
+          
+          // Kill the sandbox after capture
+          await sandbox.kill();
+          console.log(`[Sandbox] Killed sandbox ${args.sandboxId}`);
+        } catch (e) {
+          console.log(`[Sandbox] Workspace capture/kill error: ${e}`);
+        }
+      } else {
+        // No cardId or no diffs - just kill the sandbox
+        try {
+          const { Sandbox } = await import("@e2b/code-interpreter");
+          const sandbox = await Sandbox.connect(args.sandboxId);
+          await sandbox.kill();
+          console.log(`[Sandbox] Killed sandbox ${args.sandboxId}`);
+        } catch (e) {
+          console.log(`[Sandbox] Failed to kill sandbox (may already be dead): ${e}`);
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

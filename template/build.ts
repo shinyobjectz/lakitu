@@ -194,6 +194,7 @@ const baseTemplate = Template()
     HOME: "/home/user",
     PATH: "/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin",
     CONVEX_URL: "http://localhost:3210",
+    LOCAL_CONVEX_URL: "http://localhost:3210",
   });
 
 // Custom template: Add Lakitu code + PRE-BUILT Convex state + AUTO-START backend
@@ -236,6 +237,7 @@ const customTemplate = (baseId: string, buildDir: string) => Template()
     HOME: "/home/user",
     PATH: "/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin",
     CONVEX_URL: "http://localhost:3210",
+    LOCAL_CONVEX_URL: "http://localhost:3210",
     CONVEX_LOCAL_STORAGE: "/home/user/.convex/convex-backend-state/lakitu",
   })
   // AUTO-START: convex-backend starts on sandbox boot, E2B waits for port 3210

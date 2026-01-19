@@ -198,6 +198,7 @@ const baseTemplate = Template()
     HOME: "/home/user",
     PATH: "/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin",
     CONVEX_URL: "http://localhost:3210",
+    LOCAL_CONVEX_URL: "http://localhost:3210",
   });
 
 // Custom template: Add Lakitu code + PRE-BUILT Convex state + AUTO-START backend
@@ -222,6 +223,7 @@ function customTemplate(baseId: string, buildDir: string) {
       HOME: "/home/user",
       PATH: "/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin",
       CONVEX_URL: "http://localhost:3210",
+      LOCAL_CONVEX_URL: "http://localhost:3210",
       CONVEX_LOCAL_STORAGE: "/home/user/.convex/convex-backend-state/lakitu",
     })
     .setStartCmd("/home/user/start.sh", waitForPort(3210));

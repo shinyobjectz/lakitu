@@ -36,6 +36,10 @@
     "./ksa/browser": {
       "bun": "./ksa/browser.ts",
       "default": "./ksa/browser.ts"
+    },
+    "./loro": {
+      "bun": "./loro/index.ts",
+      "default": "./loro/index.ts"
     }
   },
   "files": [
@@ -44,6 +48,7 @@
     "convex.json",
     "shared",
     "ksa",
+    "loro",
     "runtime",
     "template",
     "README.md"
@@ -85,6 +90,7 @@
     "commander": "^12.1.0",
     "convex": "^1.17.0",
     "e2b": "^2.10.1",
+    "loro-crdt": "^1.10.4",
     "zod": "^3.23.0"
   },
   "devDependencies": {
@@ -95,7 +101,6 @@
     "@types/pdfkit": "^0.13.0",
     "ai": "^6.0.34",
     "convex-test": "^0.0.34",
-    "loro-crdt": "^1.0.0",
     "openapi-fetch": "^0.10.0",
     "pdfkit": "^0.15.0",
     "playwright": "^1.48.0",
