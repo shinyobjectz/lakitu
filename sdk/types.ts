@@ -40,6 +40,8 @@ export interface ServiceImpl<TArgs = unknown, TResult = unknown> {
   path: string;
   mapArgs?: (args: TArgs) => Record<string, unknown>;
   mapResult?: (result: unknown) => TResult;
+  /** Convex function type: query, mutation, or action */
+  callType?: "query" | "mutation" | "action";
 }
 
 /** Primitive implementation - uses local capabilities */

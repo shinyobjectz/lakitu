@@ -47,6 +47,7 @@ export class ServiceBuilder<TArgs = Record<string, unknown>, TResult = unknown> 
   private _path: string;
   private _mapArgs?: (args: TArgs) => Record<string, unknown>;
   private _mapResult?: (result: unknown) => TResult;
+  private _callType?: "query" | "mutation" | "action";
 
   constructor(path: string) {
     this._path = path;
@@ -64,12 +65,19 @@ export class ServiceBuilder<TArgs = Record<string, unknown>, TResult = unknown> 
     return this as unknown as ServiceBuilder<TArgs, T>;
   }
 
+  /** Specify the Convex function type (query, mutation, or action) */
+  callType(type: "query" | "mutation" | "action"): this {
+    this._callType = type;
+    return this;
+  }
+
   build(): ServiceImpl<TArgs, TResult> {
     return {
       type: "service",
       path: this._path,
       mapArgs: this._mapArgs,
       mapResult: this._mapResult,
+      callType: this._callType,
     };
   }
 }

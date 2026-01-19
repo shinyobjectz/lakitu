@@ -213,6 +213,8 @@ const customTemplate = (baseId: string, buildDir: string) => Template()
     cd /home/user/lakitu && bun install && \
     echo '#!/bin/bash\nbun run /home/user/lakitu/runtime/pdf/pdf-generator.ts "$@"' | sudo tee /usr/local/bin/generate-pdf && \
     sudo chmod +x /usr/local/bin/generate-pdf && \
+    echo '#!/bin/bash\nbun run /home/user/lakitu/runtime/browser/agent-browser-cli.ts "$@"' | sudo tee /usr/local/bin/agent-browser && \
+    sudo chmod +x /usr/local/bin/agent-browser && \
     cp -r /home/user/lakitu/ksa /home/user/ksa && \
     chown -R user:user /home/user/ksa
   `)

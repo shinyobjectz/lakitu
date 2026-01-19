@@ -103,8 +103,8 @@ async function executeService<T>(impl: ServiceImpl, args: Record<string, unknown
   // Map arguments if mapper provided
   const mappedArgs = impl.mapArgs ? impl.mapArgs(args) : args;
 
-  // Call gateway
-  const result = await callGateway(impl.path, mappedArgs);
+  // Call gateway with optional type specification
+  const result = await callGateway(impl.path, mappedArgs, impl.callType);
 
   // Map result if mapper provided
   return impl.mapResult ? (impl.mapResult(result) as T) : (result as T);
