@@ -247,6 +247,17 @@ async function buildCustom(apiKey: string, baseId: string) {
     filter: (src) => !excludes.some(ex => src.includes(`/${ex}`)),
   });
 
+  // Copy user's project KSAs from lakitu/ folder (if exists)
+  const userKsaDir = join(process.cwd(), "lakitu");
+  if (existsSync(userKsaDir)) {
+    console.log("   Copying project KSAs from lakitu/...");
+    const ksaFiles = require("fs").readdirSync(userKsaDir).filter((f: string) => f.endsWith(".ts"));
+    for (const file of ksaFiles) {
+      cpSync(join(userKsaDir, file), join(buildDir, "lakitu/ksa", file));
+    }
+    console.log(`   ✓ Copied ${ksaFiles.length} project KSAs`);
+  }
+
   // Copy start script
   cpSync(join(PACKAGE_ROOT, "template/e2b/start.sh"), join(buildDir, "start.sh"));
 
