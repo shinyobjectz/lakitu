@@ -6,6 +6,7 @@
  */
 
 import {
+  action,
   mutation,
   query,
   internalMutation,
@@ -647,5 +648,36 @@ export const list = query({
       createdAt: s.createdAt,
       completedAt: s.completedAt,
     }));
+  },
+});
+
+// ============================================
+// Public API (for KSA access via HTTP)
+// ============================================
+
+/** Public action to spawn a subagent (called by KSAs) */
+export const spawnPublic = action({
+  args: {
+    name: v.string(),
+    task: v.string(),
+    model: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.runAction(internal.agent.subagents.spawn, {
+      name: args.name,
+      task: args.task,
+      tools: [],
+      model: args.model || DEFAULT_SUBAGENT_MODEL,
+    });
+  },
+});
+
+/** Public mutation to cancel a subagent (called by KSAs) */
+export const cancelPublic = mutation({
+  args: {
+    subagentId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.runMutation(internal.agent.subagents.cancel, args);
   },
 });
