@@ -285,6 +285,7 @@ async function buildCustom(apiKey: string, baseId: string) {
     --exclude='vitest.config.ts' \
     --exclude='CLAUDE.md' \
     --exclude='scripts' \
+    --exclude='convex/cloud' \
     ${PACKAGE_ROOT}/ ${join(buildDir, "lakitu")}/`, {
     stdio: "pipe",
   });
