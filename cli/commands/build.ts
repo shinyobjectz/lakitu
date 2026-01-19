@@ -244,11 +244,15 @@ async function buildCustom(apiKey: string, baseId: string) {
   rmSync(buildDir, { recursive: true, force: true });
   mkdirSync(buildDir, { recursive: true });
 
-  // Copy lakitu source (excluding node_modules, .git, template, cli)
+  // Copy lakitu source (excluding node_modules, .git, template, cli, dist)
   const excludes = ["node_modules", ".git", "template", "cli", "dist"];
   cpSync(PACKAGE_ROOT, join(buildDir, "lakitu"), {
     recursive: true,
-    filter: (src) => !excludes.some(ex => src.includes(`/${ex}`)),
+    filter: (src) => {
+      // Get path relative to PACKAGE_ROOT to avoid matching parent directories
+      const rel = src.slice(PACKAGE_ROOT.length);
+      return !excludes.some(ex => rel.includes(`/${ex}`));
+    },
   });
 
   // Copy user's project KSAs from lakitu/ folder (if exists)
