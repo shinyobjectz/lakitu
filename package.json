@@ -1,6 +1,6 @@
 {
   "name": "@lakitu/sdk",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Self-hosted AI agent framework for Convex + E2B with code execution",
   "type": "module",
   "main": "./dist/sdk/index.js",
@@ -80,7 +80,9 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@convex-dev/agent": "^0.2.0",
     "commander": "^12.1.0",
+    "convex": "^1.17.0",
     "e2b": "^2.10.1",
     "zod": "^3.23.0"
   },
@@ -88,11 +90,9 @@
     "@anthropic-ai/sdk": "^0.27.0",
     "@ai-sdk/openai": "^3.0.10",
     "@openrouter/ai-sdk-provider": "^1.5.4",
-    "@convex-dev/agent": "^0.2.0",
     "@types/node": "^20.0.0",
     "@types/pdfkit": "^0.13.0",
     "ai": "^6.0.34",
-    "convex": "^1.17.0",
     "convex-test": "^0.0.34",
     "loro-crdt": "^1.0.0",
     "openapi-fetch": "^0.10.0",
@@ -102,9 +102,5 @@
     "vitest": "^2.0.0",
     "yaml": "^2.4.5",
     "zod-to-json-schema": "^3.23.0"
-  },
-  "peerDependencies": {
-    "convex": "^1.0.0",
-    "zod": "^3.0.0"
   }
 }
