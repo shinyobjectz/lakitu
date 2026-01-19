@@ -157,9 +157,9 @@ FROM e2bdev/code-interpreter:latest
 # System dependencies
 RUN apt-get update && apt-get install -y git curl sqlite3 libsqlite3-dev build-essential unzip && rm -rf /var/lib/apt/lists/*
 
-# Bun runtime
-RUN curl -fsSL https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:/home/user/.bun/bin:$PATH"
+# Bun runtime (install for user)
+RUN su - user -c "curl -fsSL https://bun.sh/install | bash"
+ENV PATH="/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin"
 
 # Node.js for npx convex
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*
@@ -178,25 +178,21 @@ RUN mkdir -p /home/user/workspace /home/user/.convex/convex-backend-state/lakitu
 COPY --chown=user:user lakitu/ /home/user/lakitu/
 COPY --chown=user:user start.sh /home/user/start.sh
 
-# Install dependencies and set up
+# Install dependencies
 RUN chmod +x /home/user/start.sh && \\
-    export HOME=/home/user && \\
-    export PATH="/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin" && \\
-    cd /home/user/lakitu && /home/user/.bun/bin/bun install && \\
-    echo '#!/bin/bash\\nbun run /home/user/lakitu/runtime/pdf/pdf-generator.ts "$@"' | sudo tee /usr/local/bin/generate-pdf && \\
-    sudo chmod +x /usr/local/bin/generate-pdf && \\
-    echo '#!/bin/bash\\nbun run /home/user/lakitu/runtime/browser/agent-browser-cli.ts "$@"' | sudo tee /usr/local/bin/agent-browser && \\
-    sudo chmod +x /usr/local/bin/agent-browser && \\
-    ln -sf /home/user/lakitu/ksa /home/user/ksa && \\
-    chown -R user:user /home/user/lakitu /home/user/ksa
+    cd /home/user/lakitu && /home/user/.bun/bin/bun install
+
+# Create CLI tools
+RUN printf '#!/bin/bash\\nbun run /home/user/lakitu/runtime/pdf/pdf-generator.ts "$$@"\\n' > /usr/local/bin/generate-pdf && chmod +x /usr/local/bin/generate-pdf
+RUN printf '#!/bin/bash\\nbun run /home/user/lakitu/runtime/browser/agent-browser-cli.ts "$$@"\\n' > /usr/local/bin/agent-browser && chmod +x /usr/local/bin/agent-browser
+
+# Symlinks and ownership
+RUN ln -sf /home/user/lakitu/ksa /home/user/ksa && chown -R user:user /home/user/lakitu /home/user/ksa
 
 # Pre-deploy Convex functions
-RUN export HOME=/home/user && \\
-    export PATH="/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin" && \\
-    export CONVEX_LOCAL_STORAGE=/home/user/.convex/convex-backend-state/lakitu && \\
-    mkdir -p $CONVEX_LOCAL_STORAGE && \\
+RUN mkdir -p /home/user/.convex/convex-backend-state/lakitu && \\
     cd /home/user/lakitu && \\
-    convex-backend --port 3210 --site-proxy-port 3211 --local-storage $CONVEX_LOCAL_STORAGE & \\
+    convex-backend --port 3210 --site-proxy-port 3211 --local-storage /home/user/.convex/convex-backend-state/lakitu & \\
     sleep 5 && \\
     ./node_modules/.bin/convex dev --once --typecheck disable && \\
     sleep 2 && \\
