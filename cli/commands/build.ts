@@ -111,6 +111,12 @@ async function prebuildConvex(): Promise<string> {
 
   console.log("Starting local convex-backend...");
 
+  // Filter out Bun's node shim from PATH so convex-backend finds real Node.js
+  const cleanPath = (process.env.PATH || "")
+    .split(":")
+    .filter(p => !p.includes("bun-node-"))
+    .join(":");
+
   // Start convex-backend in background
   const backend = spawn("convex-backend", [
     join(stateDir, "convex_local_backend.sqlite3"),
@@ -120,6 +126,7 @@ async function prebuildConvex(): Promise<string> {
   ], {
     cwd: stateDir,
     stdio: "pipe",
+    env: { ...process.env, PATH: cleanPath },
   });
 
   // Wait for backend to be ready
@@ -150,12 +157,6 @@ CONVEX_SELF_HOSTED_ADMIN_KEY=0135d8598650f8f5cb0f30c34ec2e2bb62793bc28717c8eb6fb
 
   try {
     // Run from package root where convex.json is (specifies functions: "convex/sandbox")
-    // Filter out Bun's node shim from PATH so convex-backend finds real Node.js
-    const cleanPath = (process.env.PATH || "")
-      .split(":")
-      .filter(p => !p.includes("bun-node-"))
-      .join(":");
-    
     execSync(`npx convex dev --once --typecheck disable --env-file ${tempEnvFile}`, {
       cwd: PACKAGE_ROOT,
       stdio: "inherit",
