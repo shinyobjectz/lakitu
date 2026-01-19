@@ -182,8 +182,8 @@ COPY --chown=user:user start.sh /home/user/start.sh
 RUN chmod +x /home/user/start.sh && \\
     cd /home/user/lakitu && /home/user/.bun/bin/bun install
 
-# Python Playwright for FlareSolverr bot bypass
-RUN pip3 install playwright && playwright install-deps chromium
+# Python Playwright + curl_cffi for FlareSolverr bot bypass
+RUN pip3 install playwright curl_cffi && playwright install-deps chromium
 USER user
 RUN playwright install chromium
 USER root
