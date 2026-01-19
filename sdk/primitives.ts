@@ -324,7 +324,8 @@ export const browser = {
 // Primitive Registry
 // ============================================================================
 
-type PrimitiveFn = (...args: unknown[]) => Promise<unknown>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type PrimitiveFn = (...args: any[]) => Promise<unknown>;
 
 /** All available primitives mapped by path */
 export const PRIMITIVES: Record<string, PrimitiveFn> = {
