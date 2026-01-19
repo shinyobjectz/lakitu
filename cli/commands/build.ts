@@ -189,15 +189,8 @@ RUN printf '#!/bin/bash\\nbun run /home/user/lakitu/runtime/browser/agent-browse
 # Symlinks and ownership
 RUN ln -sf /home/user/lakitu/ksa /home/user/ksa && chown -R user:user /home/user/lakitu /home/user/ksa
 
-# Pre-deploy Convex functions
-RUN mkdir -p /home/user/.convex/convex-backend-state/lakitu && \\
-    cd /home/user/lakitu && \\
-    convex-backend --port 3210 --site-proxy-port 3211 --local-storage /home/user/.convex/convex-backend-state/lakitu & \\
-    sleep 5 && \\
-    ./node_modules/.bin/convex dev --once --typecheck disable && \\
-    sleep 2 && \\
-    pkill convex-backend || true && \\
-    chown -R user:user /home/user/.convex
+# Create Convex state directory (functions deploy at runtime via start.sh)
+RUN mkdir -p /home/user/.convex/convex-backend-state/lakitu && chown -R user:user /home/user/.convex
 
 ENV HOME=/home/user
 ENV PATH="/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin"

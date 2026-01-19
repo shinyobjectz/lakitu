@@ -1,6 +1,6 @@
 {
   "name": "@lakitu/sdk",
-  "version": "0.1.28",
+  "version": "0.1.29",
   "description": "Self-hosted AI agent framework for Convex + E2B with code execution",
   "type": "module",
   "main": "./dist/sdk/index.js",
