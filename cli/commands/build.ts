@@ -150,9 +150,29 @@ async function buildCustom(apiKey: string, baseId: string) {
   // Copy start script
   cpSync(join(PACKAGE_ROOT, "template/e2b/start.sh"), join(buildDir, "start.sh"));
 
-  // Create Dockerfile that builds on base template
+  // Create Dockerfile - must use real Docker image, not E2B template alias
   const dockerfile = `# Lakitu Custom Template
-FROM ${baseId}
+FROM e2bdev/code-interpreter:latest
+
+# System dependencies
+RUN apt-get update && apt-get install -y git curl sqlite3 libsqlite3-dev build-essential unzip && rm -rf /var/lib/apt/lists/*
+
+# Bun runtime
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:/home/user/.bun/bin:$PATH"
+
+# Node.js for npx convex
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*
+
+# Convex local backend
+RUN curl -L -o /tmp/convex.zip "https://github.com/get-convex/convex-backend/releases/download/precompiled-2026-01-08-272e7f4/convex-local-backend-x86_64-unknown-linux-gnu.zip" && \\
+    unzip /tmp/convex.zip -d /tmp && \\
+    mv /tmp/convex-local-backend /usr/local/bin/convex-backend && \\
+    chmod +x /usr/local/bin/convex-backend && \\
+    rm /tmp/convex.zip
+
+# Directory structure
+RUN mkdir -p /home/user/workspace /home/user/.convex/convex-backend-state/lakitu /home/user/artifacts && chown -R user:user /home/user
 
 # Copy lakitu code (using Docker's COPY, not SDK's tar streaming)
 COPY --chown=user:user lakitu/ /home/user/lakitu/
