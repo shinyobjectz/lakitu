@@ -183,6 +183,56 @@ The agent can pick up exactly where it left off, even across sessions or handoff
 
 ---
 
+## Benchmarks
+
+Real-world agent task benchmarks across different models. All tests run in isolated E2B sandboxes with full code execution.
+
+### Code Generation Tasks
+
+| Model | Pass Rate | Avg Latency | Tasks |
+|-------|-----------|-------------|-------|
+| **Claude Sonnet 4.5** | 100% | 27.9s | fibonacci, palindrome, array_sum, prime_check, reverse_string |
+| **Claude Haiku 4.5** | 80% | 12.7s | 4/5 passed |
+| **Gemini 3 Flash** | 80% | 16.0s | 4/5 passed |
+
+### File Operations
+
+| Model | Pass Rate | Avg Latency | Tasks |
+|-------|-----------|-------------|-------|
+| **Claude Sonnet 4.5** | 100% | 20.7s | write_and_read, create_json, list_directory |
+
+### What's Being Measured
+
+Each benchmark:
+1. Spins up fresh E2B sandbox (~150ms)
+2. Agent writes TypeScript code importing KSAs
+3. Code executes in sandbox
+4. Results verified against expected output
+
+**Example task (fibonacci):**
+```
+Prompt: "Write a TypeScript function that returns the nth Fibonacci number. Test it with n=10."
+Expected: Agent writes function, executes it, outputs 55
+```
+
+### Run Your Own
+
+```bash
+# Quick sanity check
+bun convex run utils/dev/benchmarks/lakitu:runQuick
+
+# Full code generation suite
+bun convex run utils/dev/benchmarks/lakitu:runCodeGen
+
+# All benchmarks
+bun convex run utils/dev/benchmarks/lakitu:runAll
+
+# Specific model
+bun convex run utils/dev/benchmarks/lakitu:runAll '{"model": "anthropic/claude-haiku-4.5"}'
+```
+
+---
+
 ## Links
 
 - [npm](https://www.npmjs.com/package/@lakitu/sdk)
