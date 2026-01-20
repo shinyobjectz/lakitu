@@ -178,13 +178,14 @@ COPY --chown=user:user start.sh /home/user/start.sh
 RUN chmod +x /home/user/start.sh && \\
     cd /home/user/lakitu && /home/user/.bun/bin/bun install
 
-# Python: Lightweight Playwright for JS rendering (no heavy camoufox)
-# Bot-protected sites use cloud-side FlareSolverr via gateway
-RUN pip3 install playwright markitdown && playwright install-deps chromium
+# Lightpanda browser - 10x faster, 10x less memory than Chrome
+# https://lightpanda.io/docs/getting-started/installation
+RUN curl -L -o /usr/local/bin/lightpanda https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux && \\
+    chmod a+x /usr/local/bin/lightpanda
+
+# Python: Playwright for CDP connection to Lightpanda
+RUN pip3 install playwright markitdown
 USER user
-# Only install Chromium (lightweight, ~300MB vs 713MB for camoufox)
-RUN playwright install chromium
-USER root
 
 # Create CLI tools
 RUN printf '#!/bin/bash\\nbun run /home/user/lakitu/runtime/pdf/pdf-generator.ts "$$@"\\n' > /usr/local/bin/generate-pdf && chmod +x /usr/local/bin/generate-pdf
