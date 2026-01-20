@@ -185,9 +185,8 @@ RUN curl -L -o /usr/local/bin/lightpanda https://github.com/lightpanda-io/browse
 
 # Python: Playwright for CDP connection to Lightpanda
 RUN pip3 install playwright markitdown
-USER user
 
-# Create CLI tools
+# Create CLI tools (must be root)
 RUN printf '#!/bin/bash\\nbun run /home/user/lakitu/runtime/pdf/pdf-generator.ts "$$@"\\n' > /usr/local/bin/generate-pdf && chmod +x /usr/local/bin/generate-pdf
 RUN printf '#!/bin/bash\\nbun run /home/user/lakitu/runtime/browser/agent-browser-cli.ts "$$@"\\n' > /usr/local/bin/agent-browser && chmod +x /usr/local/bin/agent-browser
 
