@@ -103,8 +103,8 @@ async function query<T = unknown>(
     throw new Error(`Local Convex query error (${response.status}): ${text}`);
   }
 
-  const result = await response.json();
-  return result.value as T;
+  const result = await response.json() as { value: T };
+  return result.value;
 }
 
 /**
@@ -131,8 +131,8 @@ async function mutate<T = unknown>(
     throw new Error(`Local Convex mutation error (${response.status}): ${text}`);
   }
 
-  const result = await response.json();
-  return result.value as T;
+  const result = await response.json() as { value: T };
+  return result.value;
 }
 
 /**
@@ -159,8 +159,8 @@ async function action<T = unknown>(
     throw new Error(`Local Convex action error (${response.status}): ${text}`);
   }
 
-  const result = await response.json();
-  return result.value as T;
+  const result = await response.json() as { value: T };
+  return result.value;
 }
 
 /**

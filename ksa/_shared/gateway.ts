@@ -79,7 +79,7 @@ export async function callGateway<T = unknown>(
     throw new Error(`Gateway error (${response.status}): ${text}`);
   }
 
-  const result = await response.json();
+  const result = await response.json() as { ok: boolean; data?: T; error?: string };
   if (!result.ok) {
     throw new Error(`Service error: ${result.error || JSON.stringify(result)}`);
   }
@@ -129,7 +129,7 @@ export async function callGatewayBatch<T extends unknown[] = unknown[]>(
     throw new Error(`Gateway batch error (${response.status}): ${text}`);
   }
 
-  const result = await response.json();
+  const result = await response.json() as { ok: boolean; results: BatchResult<T[number]>[]; error?: string };
   if (!result.ok) {
     throw new Error(`Batch error: ${result.error || JSON.stringify(result)}`);
   }

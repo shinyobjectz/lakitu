@@ -4,7 +4,11 @@
  * Initialize and deploy Cloudflare workers and R2 buckets.
  */
 
-import { $ } from "bun";
+import { execSync, exec } from "child_process";
+import { mkdirSync, writeFileSync, existsSync } from "fs";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
 
 interface CloudflareOptions {
   project?: string;
@@ -20,7 +24,7 @@ export async function initCloudflare(options: CloudflareOptions) {
   console.log("Initializing Cloudflare configuration...\n");
 
   // Create workers directory
-  await $`mkdir -p ${workersDir}/frames/src`;
+  mkdirSync(`${workersDir}/frames/src`, { recursive: true });
 
   // Create wrangler.toml for frames worker
   const wranglerToml = `name = "lakitu-frames"
@@ -37,7 +41,7 @@ preview_bucket_name = "frames-preview"
 command = "bun install"
 `;
 
-  await Bun.write(`${workersDir}/frames/wrangler.toml`, wranglerToml);
+  writeFileSync(`${workersDir}/frames/wrangler.toml`, wranglerToml);
 
   // Create package.json
   const packageJson = {
@@ -54,7 +58,7 @@ command = "bun install"
     },
   };
 
-  await Bun.write(`${workersDir}/frames/package.json`, JSON.stringify(packageJson, null, 2));
+  writeFileSync(`${workersDir}/frames/package.json`, JSON.stringify(packageJson, null, 2));
 
   // Create worker entry point
   const workerCode = `/**
@@ -77,7 +81,7 @@ export default {
 };
 `;
 
-  await Bun.write(`${workersDir}/frames/src/index.ts`, workerCode);
+  writeFileSync(`${workersDir}/frames/src/index.ts`, workerCode);
 
   console.log("Created Cloudflare worker configuration:");
   console.log(`  - ${workersDir}/frames/wrangler.toml`);
@@ -100,7 +104,7 @@ export async function deployCloudflare(options: CloudflareOptions) {
 
   // Check if wrangler is installed
   try {
-    await $`which wrangler`.quiet();
+    execSync("which wrangler", { stdio: "ignore" });
   } catch {
     console.error("Error: wrangler CLI not found. Install with: npm install -g wrangler");
     process.exit(1);
@@ -108,21 +112,19 @@ export async function deployCloudflare(options: CloudflareOptions) {
 
   // Deploy frames worker
   const framesDir = `${workersDir}/frames`;
-  try {
-    await $`test -f ${framesDir}/wrangler.toml`.quiet();
-  } catch {
+  if (!existsSync(`${framesDir}/wrangler.toml`)) {
     console.error(`Error: No wrangler.toml found in ${framesDir}`);
     console.error("Run 'npx @lakitu/sdk cloudflare init' first");
     process.exit(1);
   }
 
   console.log("Deploying frames worker...");
-  const result = await $`cd ${framesDir} && wrangler deploy`.nothrow();
-
-  if (result.exitCode === 0) {
+  try {
+    const { stdout, stderr } = await execAsync("wrangler deploy", { cwd: framesDir });
+    if (stdout) console.log(stdout);
     console.log("\n✅ Frames worker deployed successfully!");
-  } else {
-    console.error("\n❌ Deployment failed:", result.stderr.toString());
+  } catch (error: any) {
+    console.error("\n❌ Deployment failed:", error.stderr || error.message);
     process.exit(1);
   }
 }
