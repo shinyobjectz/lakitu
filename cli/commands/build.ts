@@ -8,15 +8,13 @@
 import { Template, defaultBuildLogger, waitForPort } from "e2b";
 import { existsSync, mkdirSync, rmSync, cpSync, writeFileSync, readFileSync, readdirSync } from "fs";
 import { join, dirname } from "path";
-import { execSync, spawn } from "child_process";
+import { execSync } from "child_process";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = __dirname.includes("/dist/") 
   ? join(__dirname, "../../..") 
   : join(__dirname, "../..");
-
-const STATE_DIR = "/tmp/lakitu-convex-state";
 
 interface BuildOptions {
   base?: boolean;
@@ -71,92 +69,6 @@ function preflightCheck(): string {
   return result.key;
 }
 
-async function sleep(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
- * Pre-build Convex locally: start backend, deploy functions, capture state
- */
-async function prebuildConvex(): Promise<string> {
-  console.log("📦 Pre-building Convex functions locally...");
-
-  // Clean up any existing state
-  rmSync(STATE_DIR, { recursive: true, force: true });
-  mkdirSync(STATE_DIR, { recursive: true });
-
-  // Kill any existing convex-backend
-  try {
-    execSync("pkill -f 'convex-backend' || true", { stdio: "pipe" });
-  } catch { /* ignore */ }
-  await sleep(1000);
-
-  console.log("   Starting local convex-backend...");
-
-  // Start convex-backend in background
-  const backend = spawn("convex-backend", [
-    `${STATE_DIR}/convex_local_backend.sqlite3`,
-    "--port", "3210",
-    "--site-proxy-port", "3211",
-    "--local-storage", STATE_DIR,
-  ], {
-    cwd: STATE_DIR,
-    stdio: "pipe",
-    detached: true,
-  });
-
-  // Wait for backend to be ready
-  for (let i = 0; i < 30; i++) {
-    try {
-      const res = await fetch("http://127.0.0.1:3210/version");
-      if (res.ok) {
-        console.log(`   Backend ready after ${i + 1} seconds`);
-        break;
-      }
-    } catch { /* not ready yet */ }
-
-    if (i === 29) {
-      backend.kill();
-      throw new Error("Backend failed to start after 30 seconds");
-    }
-    await sleep(1000);
-  }
-
-  // Deploy functions using convex dev --once
-  console.log("   Deploying functions with convex dev --once...");
-
-  // Build clean env without CONVEX_DEPLOYMENT
-  const cleanEnv = { ...process.env };
-  delete cleanEnv.CONVEX_DEPLOYMENT;
-  cleanEnv.CONVEX_SELF_HOSTED_URL = "http://127.0.0.1:3210";
-  cleanEnv.CONVEX_SELF_HOSTED_ADMIN_KEY = "0135d8598650f8f5cb0f30c34ec2e2bb62793bc28717c8eb6fb577996d50be5f4281b59181095065c5d0f86a2c31ddbe9b597ec62b47ded69782cd";
-
-  try {
-    execSync(`cd ${PACKAGE_ROOT} && npx convex dev --once --typecheck disable`, {
-      env: cleanEnv,
-      stdio: "pipe",
-    });
-    console.log("   ✓ Functions deployed successfully!");
-  } catch (e: any) {
-    backend.kill();
-    throw new Error(`Convex deploy failed: ${e.message}`);
-  }
-
-  // Give backend a moment to flush state
-  await sleep(2000);
-
-  // Stop backend gracefully
-  console.log("   Stopping backend...");
-  backend.kill("SIGTERM");
-  await sleep(1000);
-
-  // Verify state was captured
-  const moduleFiles = readdirSync(`${STATE_DIR}/modules`).length;
-  console.log(`   ✓ ${moduleFiles} modules deployed\n`);
-
-  return STATE_DIR;
-}
-
 // Base template using standard Template builder
 const baseTemplate = Template()
   .fromImage("e2bdev/code-interpreter:latest")
@@ -193,9 +105,6 @@ async function buildBase(apiKey: string) {
 
 async function buildCustom(apiKey: string, baseId: string) {
   const buildDir = "/tmp/lakitu-build";
-
-  // Step 1: Pre-build Convex functions locally
-  const stateDir = await prebuildConvex();
 
   console.log("📦 Preparing Dockerfile build context...");
   rmSync(buildDir, { recursive: true, force: true });
@@ -236,10 +145,6 @@ async function buildCustom(apiKey: string, baseId: string) {
 
   // Copy start script
   cpSync(join(PACKAGE_ROOT, "template/e2b/start.sh"), join(buildDir, "start.sh"));
-
-  // Copy pre-built Convex state
-  cpSync(stateDir, join(buildDir, "convex-state"), { recursive: true });
-  console.log("   ✓ Copied pre-built Convex state");
 
   // Create Dockerfile - must use real Docker image, not E2B template alias
   const dockerfile = `# Lakitu Custom Template
@@ -286,8 +191,8 @@ RUN printf '#!/bin/bash\\nbun run /home/user/lakitu/runtime/browser/agent-browse
 # Symlinks and ownership
 RUN ln -sf /home/user/lakitu/ksa /home/user/ksa && chown -R user:user /home/user/lakitu /home/user/ksa
 
-# Copy PRE-BUILT Convex state (functions already deployed!)
-COPY --chown=user:user convex-state/ /home/user/.convex/convex-backend-state/lakitu/
+# Create Convex state directory (functions deploy at first boot via start.sh)
+RUN mkdir -p /home/user/.convex/convex-backend-state/lakitu && chown -R user:user /home/user/.convex
 
 ENV HOME=/home/user
 ENV PATH="/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin"
