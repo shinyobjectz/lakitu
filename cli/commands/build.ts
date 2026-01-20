@@ -178,13 +178,15 @@ COPY --chown=user:user start.sh /home/user/start.sh
 RUN chmod +x /home/user/start.sh && \\
     cd /home/user/lakitu && /home/user/.bun/bin/bun install
 
-# Python: crawl4ai + camoufox + playwright for stealth scraping
-RUN pip3 install crawl4ai playwright camoufox[geoip] curl_cffi && playwright install-deps chromium firefox
+# Python: crawl4ai + camoufox + playwright for stealth scraping (v2 - force cache bust)
+# Combined step to ensure camoufox browser binary is pre-downloaded
+RUN pip3 install crawl4ai playwright "camoufox[geoip]>=0.4" curl_cffi && \\
+    playwright install-deps chromium firefox
 USER user
-# Install Playwright browsers and pre-download Camoufox browser (triggers on first import with launch)
-RUN playwright install chromium firefox
-# Pre-download camoufox browser binary (713MB) during build, not at runtime
-RUN python3 -c "from camoufox.sync_api import Camoufox; c=Camoufox(headless=True); c.close(); print('camoufox browser pre-installed')" || python3 -c "import camoufox; camoufox.fetch_firefox(); print('camoufox fetched manually')" || true
+# Pre-download both Playwright browsers AND Camoufox browser (713MB) in one layer
+RUN playwright install chromium firefox && \\
+    python3 -c "import camoufox; camoufox.fetch_firefox(); print('camoufox fetched')" && \\
+    ls -la ~/.cache/camoufox/ || echo "checking cache"
 USER root
 
 # Create CLI tools
