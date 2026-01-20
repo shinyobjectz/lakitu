@@ -28,6 +28,7 @@ export const execute = internalAction({
     env: v.optional(v.object({
       CONVEX_URL: v.optional(v.string()),
       GATEWAY_URL: v.optional(v.string()),
+      LOCAL_CONVEX_URL: v.optional(v.string()),
       SANDBOX_JWT: v.optional(v.string()),
       CARD_ID: v.optional(v.string()),
       THREAD_ID: v.optional(v.string()),
