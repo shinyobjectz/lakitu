@@ -179,9 +179,12 @@ RUN chmod +x /home/user/start.sh && \\
     cd /home/user/lakitu && /home/user/.bun/bin/bun install
 
 # Python: crawl4ai + camoufox + playwright for stealth scraping
-RUN pip3 install crawl4ai playwright camoufox curl_cffi && playwright install-deps chromium firefox
+RUN pip3 install crawl4ai playwright camoufox[geoip] curl_cffi && playwright install-deps chromium firefox
 USER user
-RUN playwright install chromium firefox && python3 -c "from camoufox.sync_api import Camoufox; print('camoufox ok')" || true
+# Install Playwright browsers and pre-download Camoufox browser (triggers on first import with launch)
+RUN playwright install chromium firefox
+# Pre-download camoufox browser binary (713MB) during build, not at runtime
+RUN python3 -c "from camoufox.sync_api import Camoufox; c=Camoufox(headless=True); c.close(); print('camoufox browser pre-installed')" || python3 -c "import camoufox; camoufox.fetch_firefox(); print('camoufox fetched manually')" || true
 USER root
 
 # Create CLI tools
