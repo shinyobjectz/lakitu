@@ -19,6 +19,10 @@
     "sdk/index.ts",
     "sdk/types.ts",
     "sdk/builders.ts",
+    "sdk/gateway.ts",
+    "sdk/db.ts",
+    "sdk/template.ts",
+    "sdk/primitives.ts",
     "cli/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]
