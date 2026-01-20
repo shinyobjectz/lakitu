@@ -14,6 +14,23 @@ npx @lakitu/sdk init
 
 ---
 
+## Table of Contents
+
+- [Why Lakitu?](#why-lakitu)
+- [Quick Start](#quick-start)
+- [Import Reference](#import-reference)
+- [Configuration](#configuration)
+- [Defining KSAs](#defining-ksas)
+- [Built-in KSAs](#built-in-ksas)
+- [Gateway API](#gateway-api)
+- [Local Database](#local-database)
+- [Template Customization](#template-customization)
+- [CLI Commands](#cli-commands)
+- [Benchmarks](#benchmarks)
+- [Contributing](#contributing)
+
+---
+
 ## Why Lakitu?
 
 **The core problem:** AI coding agents forget their plan halfway through complex tasks, corrupt the host environment, and hallucinate progress they haven't made.
@@ -27,9 +44,7 @@ npx @lakitu/sdk init
 | **Beads** | Git-backed task graph. Agent always knows what's done, what's blocked, what's next. |
 | **Convex** | Real-time database in the sandbox. Agent can verify actual state, not just claim progress. |
 
----
-
-## Code Execution vs Tool Calls
+### Code Execution vs Tool Calls
 
 Most agent frameworks use JSON tool calls:
 ```json
@@ -71,24 +86,102 @@ npx @lakitu/sdk build
 
 Pre-deploys Convex functions into an E2B template. Sandboxes boot instantly with everything ready.
 
-### 3. Configure
+### 3. Configure Convex
+
+```typescript
+// convex/convex.config.ts
+import { defineApp } from "convex/server";
+import lakitu from "@lakitu/sdk/convex.config";
+
+const app = defineApp();
+app.use(lakitu);
+
+export default app;
+```
+
+---
+
+## Import Reference
+
+Lakitu provides clean, tree-shakeable imports:
+
+```typescript
+// Main entry - everything in one import
+import { 
+  defineKSA, fn, service, primitive,  // KSA builders
+  callGateway, fireAndForget,          // Cloud gateway
+  localDb, getSessionId,               // Local database
+  THREAD_ID, CARD_ID, WORKSPACE_ID,    // Context identifiers
+} from '@lakitu/sdk';
+
+// Tree-shakeable imports for smaller bundles
+import { callGateway, THREAD_ID } from '@lakitu/sdk/gateway';
+import { localDb, getSessionId } from '@lakitu/sdk/db';
+import { defineKSA, fn, service } from '@lakitu/sdk/builders';
+import { file, shell, browser } from '@lakitu/sdk/primitives';
+```
+
+### Export Summary
+
+| Export | Description |
+|--------|-------------|
+| `@lakitu/sdk` | Everything - builders, gateway, db, primitives |
+| `@lakitu/sdk/gateway` | Cloud Convex access (`callGateway`, `fireAndForget`) |
+| `@lakitu/sdk/db` | Local sandbox Convex (`localDb`) |
+| `@lakitu/sdk/builders` | KSA definition (`defineKSA`, `fn`, `service`) |
+| `@lakitu/sdk/primitives` | Sandbox operations (`file`, `shell`, `browser`) |
+| `@lakitu/sdk/types` | TypeScript types only |
+| `@lakitu/sdk/loro` | CRDT utilities (LoroFS, LoroBeads) |
+| `@lakitu/sdk/convex.config` | Convex component config |
+
+---
+
+## Configuration
+
+### Lakitu Configuration
 
 ```typescript
 // convex/lakitu/config.ts
 import { Lakitu } from "@lakitu/sdk";
 
 export default Lakitu.configure({
+  // E2B template name (default: "lakitu")
   template: "lakitu",
-  model: "anthropic/claude-sonnet-4-20250514",
-  ksas: ["file", "shell", "browser", "beads"],
+  
+  // Model presets: "fast", "balanced", "capable", "vision"
+  model: "balanced",
+  
+  // Or specify model directly
+  // model: "anthropic/claude-sonnet-4",
+  
+  // KSAs to enable
+  ksas: ["file", "shell", "browser", "beads", "web"],
+  
+  // Gateway configuration
+  gateway: {
+    // Additional allowed paths beyond defaults
+    allowedPaths: [
+      "features.myFeature.internal.*",
+      "services.MyService.action",
+    ],
+  },
 });
 ```
+
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `E2B_API_KEY` | E2B API key | Yes |
+| `CONVEX_DEPLOYMENT` | Convex deployment URL | Yes |
+| `SANDBOX_JWT_SECRET` | JWT secret for sandbox auth | Yes |
+| `OPENROUTER_API_KEY` | OpenRouter API key for LLM | Yes |
 
 ---
 
 ## Defining KSAs
 
-KSAs (Knowledge, Skills, Abilities) are capability modules. Instead of prompt engineering, you define what the agent can do in TypeScript:
+KSAs (Knowledge, Skills, Abilities) are capability modules. Define what the agent can do in TypeScript:
 
 ```typescript
 import { defineKSA, fn, service, primitive } from "@lakitu/sdk";
@@ -111,7 +204,7 @@ export const dbKSA = defineKSA("database")
   .build();
 ```
 
-### Implementation types
+### Implementation Types
 
 **Service** — calls your Convex backend:
 ```typescript
@@ -125,13 +218,28 @@ export const dbKSA = defineKSA("database")
 .impl(primitive("browser.screenshot"))
 ```
 
-### Built-in primitives
+### Writing Project KSAs
 
-| Category | Functions |
-|----------|-----------|
-| `file` | `read`, `write`, `edit`, `glob`, `grep`, `ls`, `exists`, `stat` |
-| `shell` | `exec` |
-| `browser` | `open`, `screenshot`, `click`, `type`, `getHtml`, `getText`, `close` |
+Project KSAs live in `convex/lakitu/ksa/` and use the gateway to call your Convex backend:
+
+```typescript
+// convex/lakitu/ksa/myFeature.ts
+import { callGateway } from "@lakitu/sdk/gateway";
+
+export interface Item { id: string; name: string; }
+
+/** List all items */
+export const list = () => 
+  callGateway<Item[]>("features.myFeature.list", {});
+
+/** Get item by ID */
+export const get = (id: string) => 
+  callGateway<Item>("features.myFeature.get", { id });
+
+/** Create new item */
+export const create = (name: string) => 
+  callGateway<{ id: string }>("internal.features.myFeature.create", { name }, "mutation");
+```
 
 ---
 
@@ -146,6 +254,116 @@ export const dbKSA = defineKSA("database")
 | `web` | Search and scrape |
 | `pdf` | Generate PDFs from markdown |
 | `email` | Send emails |
+
+### Built-in Primitives
+
+| Category | Functions |
+|----------|-----------|
+| `file` | `read`, `write`, `edit`, `glob`, `grep`, `ls`, `exists`, `stat` |
+| `shell` | `exec` |
+| `browser` | `open`, `screenshot`, `click`, `type`, `getHtml`, `getText`, `close` |
+
+---
+
+## Gateway API
+
+The gateway enables sandbox code to call your cloud Convex backend securely.
+
+### callGateway
+
+```typescript
+import { callGateway } from "@lakitu/sdk/gateway";
+
+// Basic usage
+const data = await callGateway("features.users.list", { limit: 10 });
+
+// With type annotation
+const user = await callGateway<User>("features.users.get", { id: "123" });
+
+// Specify operation type (query/mutation/action)
+const result = await callGateway(
+  "internal.features.users.create",
+  { name: "John" },
+  "mutation"
+);
+```
+
+### callGatewayBatch
+
+Execute multiple calls in a single HTTP request:
+
+```typescript
+import { callGatewayBatch } from "@lakitu/sdk/gateway";
+
+const [users, posts] = await callGatewayBatch([
+  { path: "features.users.list", args: { limit: 10 } },
+  { path: "features.posts.recent", args: {} },
+]);
+
+if (users.ok) console.log(users.data);
+```
+
+### fireAndForget
+
+Non-blocking calls for logging/analytics:
+
+```typescript
+import { fireAndForget } from "@lakitu/sdk/gateway";
+
+// Won't block execution
+fireAndForget("services.Analytics.track", { event: "page_view" });
+```
+
+---
+
+## Local Database
+
+The sandbox has its own Convex instance for fast local operations.
+
+```typescript
+import { localDb, getSessionId } from "@lakitu/sdk/db";
+
+// Query
+const files = await localDb.query("state/files.getByPath", { path: "/workspace" });
+
+// Mutation
+const id = await localDb.mutate("planning/beads.create", { title: "Task" });
+
+// Fire-and-forget (non-blocking)
+localDb.fire("state/files.trackAccess", { path: "/workspace" });
+
+// Get session context
+const sessionId = getSessionId();
+```
+
+---
+
+## Template Customization
+
+Customize the sandbox environment with a template config:
+
+```typescript
+// convex/lakitu/template.config.ts
+import { defineTemplate } from "@lakitu/sdk/template";
+
+export default defineTemplate({
+  packages: {
+    apt: ["ffmpeg", "imagemagick", "poppler-utils"],
+    pip: ["pandas", "numpy", "pillow"],
+    npm: ["sharp", "canvas"],
+  },
+  services: ["redis"],
+  setup: [
+    "pip install -r requirements.txt",
+  ],
+});
+```
+
+Build with custom packages:
+
+```bash
+npx @lakitu/sdk build --custom
+```
 
 ---
 
@@ -162,7 +380,7 @@ npx @lakitu/sdk publish           # Template management
 
 ---
 
-## How the pieces fit together
+## How It Works
 
 1. **Agent receives task** → loads relevant KSAs
 2. **Queries Beads** → `bd ready` returns unblocked work
@@ -172,14 +390,6 @@ npx @lakitu/sdk publish           # Template management
 6. **Session ends** → `bd sync` persists everything to git
 
 The agent can pick up exactly where it left off, even across sessions or handoffs to other agents.
-
----
-
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `E2B_API_KEY` | Your E2B API key (or `e2b auth login`) |
 
 ---
 
@@ -195,26 +405,6 @@ Real-world agent task benchmarks across different models. All tests run in isola
 | **Claude Haiku 4.5** | 80% (4/5) | 12.7s |
 | **Gemini 3 Flash Preview** | 80% (4/5) | 16.0s |
 
-Tasks: fibonacci, palindrome, array_sum, prime_check, reverse_string
-
-### GAIA Research (Long-Horizon)
-
-| Model | Pass Rate | Avg Latency |
-|-------|-----------|-------------|
-| **Gemini 3 Flash Preview** | 67% (2/3) | 42.0s |
-| **Claude Haiku 4.5** | 33% (1/3) | 49.4s |
-
-Tasks: research_synthesis, multimodal_analysis, tool_orchestration
-
-### Static Page Creation
-
-| Model | Pass Rate | Avg Latency |
-|-------|-----------|-------------|
-| **Gemini 3 Flash Preview** | 100% (3/3) | 78.3s |
-| **Claude Haiku 4.5** | 0% (0/3) | 24.1s |
-
-Tasks: landing_page, portfolio_page, documentation_page
-
 ### Summary
 
 | Category | Best Model | Notes |
@@ -224,24 +414,11 @@ Tasks: landing_page, portfolio_page, documentation_page
 | **Page Creation** | Gemini 3 Flash | Better output verbosity |
 | **Speed** | Claude Haiku 4.5 | 2-3x faster than others |
 
-### Run Your Own
+---
 
-```bash
-# Quick sanity check
-bun convex run utils/dev/benchmarks/lakitu:runQuick
+## Contributing
 
-# Code generation
-bun convex run utils/dev/benchmarks/lakitu:runCodeGen
-
-# GAIA research tasks
-bun convex run utils/dev/benchmarks/longHorizon:runGAIA
-
-# Static pages
-bun convex run utils/dev/benchmarks/staticPages:runAll
-
-# Specific model
-bun convex run utils/dev/benchmarks/lakitu:runAll '{"model": "google/gemini-3-flash-preview"}'
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
 ---
 
@@ -249,6 +426,7 @@ bun convex run utils/dev/benchmarks/lakitu:runAll '{"model": "google/gemini-3-fl
 
 - [npm](https://www.npmjs.com/package/@lakitu/sdk)
 - [GitHub](https://github.com/shinyobjectz/lakitu)
+- [API Reference](docs/API.md)
 - [E2B](https://e2b.dev/docs)
 - [Convex](https://docs.convex.dev)
 - [Beads](https://github.com/steveyegge/beads)

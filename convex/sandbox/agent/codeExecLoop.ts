@@ -18,10 +18,11 @@ import { internal } from "../_generated/api";
 import { wrapCodeForExecution, extractCodeBlocks } from "../utils/codeExecHelpers";
 import type { ChainOfThoughtStep, StepStatus } from "../../../shared/chain-of-thought";
 import { createStepId } from "../../../shared/chain-of-thought";
+import { MODEL_PRESETS, resolveModel, type ModelPreset } from "../../cloud/models";
 
-// Default model for code execution loop - used as fallback if no model passed via context
-// The model should be passed from unified settings (convex/features/settings/models.ts)
-const DEFAULT_MODEL = "anthropic/claude-sonnet-4";
+// Default model preset for code execution loop
+// Actual model resolved via MODEL_PRESETS or custom config
+const DEFAULT_PRESET: ModelPreset = "balanced";
 
 // ============================================================================
 // Types
@@ -188,6 +189,7 @@ async function callCloudLLM(
   gatewayConfig: GatewayConfig,
   options: {
     model?: string;
+    preset?: ModelPreset;
     maxTokens?: number;
     temperature?: number;
   } = {}
@@ -198,6 +200,10 @@ async function callCloudLLM(
     throw new Error("Gateway not configured");
   }
 
+  // Resolve model from preset or direct model name
+  const model = options.model 
+    || resolveModel(options.preset || DEFAULT_PRESET);
+
   const response = await fetch(`${convexUrl}/agent/call`, {
     method: "POST",
     headers: {
@@ -207,7 +213,7 @@ async function callCloudLLM(
     body: JSON.stringify({
       path: "internal.services.OpenRouter.internal.chatCompletion",
       args: {
-        model: options.model || DEFAULT_MODEL,
+        model,
         messages,
         responseFormat: {
           type: "json_schema",

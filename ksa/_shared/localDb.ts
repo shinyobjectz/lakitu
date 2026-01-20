@@ -9,8 +9,10 @@
  * - No JWT required (sandbox is trusted)
  * - Designed for high-frequency, low-latency operations
  *
+ * @deprecated Import from '@lakitu/sdk' or '@lakitu/sdk/db' instead of '@lakitu/sdk/ksa/localDb'
+ *
  * @example
- * import { localDb, getSessionId } from './_shared/localDb';
+ * import { localDb, getSessionId } from '@lakitu/sdk/db';
  *
  * // Blocking query
  * const files = await localDb.query('state/files:getByThread', { threadId });

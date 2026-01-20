@@ -5,10 +5,11 @@
  * Strategy: Build Convex LOCALLY first, then upload pre-built state to E2B
  *
  * Steps:
- *   1. Start local convex-backend
- *   2. Deploy functions with `convex dev --once`
- *   3. Stop backend, capture the state directory
- *   4. Build E2B template with pre-built state baked in
+ *   1. Load template config from convex/lakitu/template.config.ts (if exists)
+ *   2. Start local convex-backend
+ *   3. Deploy functions with `convex dev --once`
+ *   4. Stop backend, capture the state directory
+ *   5. Build E2B template with pre-built state + custom packages baked in
  *
  * Usage:
  *   bun lakitu              # Build the template
@@ -18,10 +19,65 @@
 
 import { Template, defaultBuildLogger, waitForPort } from "e2b";
 import { $ } from "bun";
+import type { TemplateConfig } from "../sdk/template";
 
 const LAKITU_DIR = `${import.meta.dir}/..`;
 const STATE_DIR = "/tmp/lakitu-convex-state";
 const BUILD_DIR = "/tmp/lakitu-build";
+
+/**
+ * Load template config from project's convex/lakitu/template.config.ts
+ */
+async function loadTemplateConfig(): Promise<TemplateConfig> {
+  const configPaths = [
+    `${LAKITU_DIR}/../../convex/lakitu/template.config.ts`,
+    `${process.cwd()}/convex/lakitu/template.config.ts`,
+  ];
+
+  for (const configPath of configPaths) {
+    try {
+      const configModule = await import(configPath);
+      const config = configModule.default || configModule;
+      console.log(`Loaded template config from ${configPath}`);
+      return config;
+    } catch {
+      // Config not found, continue to next path
+    }
+  }
+
+  console.log("No template config found, using defaults");
+  return {
+    packages: { apt: [], pip: [], npm: [] },
+    services: [],
+    setup: [],
+    env: {},
+    files: {},
+  };
+}
+
+/**
+ * Generate apt install command from config
+ */
+function generateAptInstall(packages: string[]): string {
+  if (packages.length === 0) return "";
+  return `sudo apt-get install -y ${packages.join(" ")}`;
+}
+
+/**
+ * Generate pip install command from config
+ */
+function generatePipInstall(packages: string[]): string {
+  if (packages.length === 0) return "";
+  return `pip3 install ${packages.join(" ")}`;
+}
+
+/**
+ * Generate npm install command from config
+ */
+function generateNpmInstall(packages: string[]): string {
+  if (packages.length === 0) return "";
+  return `npm install -g ${packages.join(" ")}`;
+}
 
 async function getApiKey(): Promise<string> {
   if (process.env.E2B_API_KEY) return process.env.E2B_API_KEY;
@@ -205,17 +261,53 @@ const baseTemplate = Template()
   });
 
 // Custom template: Add Lakitu code + PRE-BUILT Convex state + AUTO-START backend
-const customTemplate = (baseId: string, buildDir: string) => Template()
-  .fromTemplate(baseId)
-  // Copy Lakitu source code
-  .copy(`${buildDir}/lakitu`, "/home/user/lakitu")
-  .copy(`${buildDir}/start.sh`, "/home/user/start.sh")
-  // Copy project-specific KSAs
-  .copy(`${buildDir}/project-ksa`, "/home/user/project-ksa")
-  // Copy PRE-BUILT Convex state (functions already deployed!)
-  .copy(`${buildDir}/convex-state`, "/home/user/.convex/convex-backend-state/lakitu")
+const customTemplate = (baseId: string, buildDir: string, config: TemplateConfig) => {
+  let template = Template()
+    .fromTemplate(baseId)
+    // Copy Lakitu source code
+    .copy(`${buildDir}/lakitu`, "/home/user/lakitu")
+    .copy(`${buildDir}/start.sh`, "/home/user/start.sh")
+    // Copy project-specific KSAs
+    .copy(`${buildDir}/project-ksa`, "/home/user/project-ksa")
+    // Copy PRE-BUILT Convex state (functions already deployed!)
+    .copy(`${buildDir}/convex-state`, "/home/user/.convex/convex-backend-state/lakitu");
+
+  // Install custom packages from template config
+  const aptPackages = config.packages?.apt || [];
+  const pipPackages = config.packages?.pip || [];
+  const npmPackages = config.packages?.npm || [];
+
+  if (aptPackages.length > 0 || pipPackages.length > 0 || npmPackages.length > 0) {
+    console.log("Installing custom packages from template config...");
+    const installCmds: string[] = [];
+    
+    if (aptPackages.length > 0) {
+      console.log(`  APT: ${aptPackages.join(", ")}`);
+      installCmds.push(generateAptInstall(aptPackages));
+    }
+    if (pipPackages.length > 0) {
+      console.log(`  PIP: ${pipPackages.join(", ")}`);
+      installCmds.push(generatePipInstall(pipPackages));
+    }
+    if (npmPackages.length > 0) {
+      console.log(`  NPM: ${npmPackages.join(", ")}`);
+      installCmds.push(generateNpmInstall(npmPackages));
+    }
+
+    template = template.runCmd(installCmds.join(" && "));
+  }
+
+  // Run custom setup commands
+  const setupCmds = config.setup || [];
+  if (setupCmds.length > 0) {
+    console.log(`Running ${setupCmds.length} custom setup commands...`);
+    for (const cmd of setupCmds) {
+      template = template.runCmd(cmd);
+    }
+  }
+
   // Fix permissions and install dependencies (but NO convex deploy needed!)
-  .runCmd(`
+  template = template.runCmd(`
     sudo chown -R user:user /home/user/lakitu /home/user/start.sh /home/user/.convex /home/user/project-ksa && \
     chmod +x /home/user/start.sh && \
     export HOME=/home/user && \
@@ -239,17 +331,22 @@ const customTemplate = (baseId: string, buildDir: string) => Template()
     echo "SQLite database:" && \
     ls -la /home/user/.convex/convex-backend-state/lakitu/convex_local_backend.sqlite3 && \
     echo "=== State verified ==="
-  `)
-  .setEnvs({
+  `);
+
+  // Set environment variables (merge defaults with config)
+  const envVars = {
     HOME: "/home/user",
     PATH: "/home/user/.bun/bin:/usr/local/bin:/usr/bin:/bin",
     CONVEX_URL: "http://localhost:3210",
     LOCAL_CONVEX_URL: "http://localhost:3210",
     CONVEX_LOCAL_STORAGE: "/home/user/.convex/convex-backend-state/lakitu",
-  })
+    ...(config.env || {}),
+  };
+  template = template.setEnvs(envVars);
+
   // AUTO-START: convex-backend starts on sandbox boot, E2B waits for port 3210
-  // This eliminates ~1000ms of polling overhead - backend is ready when create() returns
-  .setStartCmd("/home/user/start.sh", waitForPort(3210));
+  return template.setStartCmd("/home/user/start.sh", waitForPort(3210));
+};
 
 async function buildBase() {
   const apiKey = await getApiKey();
@@ -267,6 +364,9 @@ async function buildBase() {
 
 async function buildCustom(baseId = "lakitu-base") {
   const apiKey = await getApiKey();
+
+  // Step 0: Load template config
+  const templateConfig = await loadTemplateConfig();
 
   // Step 1: Pre-build Convex locally
   const stateDir = await prebuildConvex();
@@ -296,11 +396,32 @@ async function buildCustom(baseId = "lakitu-base") {
     ${LAKITU_DIR}/ ${BUILD_DIR}/lakitu/`.quiet();
   await $`cp ${import.meta.dir}/e2b/start.sh ${BUILD_DIR}/`;
 
-  // Copy project-specific KSAs from lakitu/ (project root)
-  const PROJECT_KSA_DIR = `${LAKITU_DIR}/../../lakitu`;
+  // Copy project-specific KSAs from convex/lakitu/ksa/ (new location) or lakitu/ (legacy)
+  const NEW_KSA_DIR = `${LAKITU_DIR}/../../convex/lakitu/ksa`;
+  const LEGACY_KSA_DIR = `${LAKITU_DIR}/../../lakitu`;
   await $`mkdir -p ${BUILD_DIR}/project-ksa`.quiet();
-  await $`cp -r ${PROJECT_KSA_DIR}/* ${BUILD_DIR}/project-ksa/`.quiet();
-  console.log("Copied project KSAs to build context");
+  
+  // Try new location first, fall back to legacy
+  try {
+    await $`test -d ${NEW_KSA_DIR}`.quiet();
+    await $`cp -r ${NEW_KSA_DIR}/* ${BUILD_DIR}/project-ksa/`.quiet();
+    console.log("Copied project KSAs from convex/lakitu/ksa/");
+  } catch {
+    try {
+      await $`cp -r ${LEGACY_KSA_DIR}/* ${BUILD_DIR}/project-ksa/`.quiet();
+      console.log("Copied project KSAs from lakitu/ (legacy location)");
+    } catch {
+      console.log("No project KSAs found");
+    }
+  }
+
+  // Copy custom files from template config
+  const customFiles = templateConfig.files || {};
+  for (const [dest, src] of Object.entries(customFiles)) {
+    const srcPath = `${LAKITU_DIR}/../../${src}`;
+    await $`cp -r ${srcPath} ${BUILD_DIR}/${dest}`.quiet();
+    console.log(`Copied custom file: ${src} -> ${dest}`);
+  }
 
   // Copy pre-built Convex state
   await $`cp -r ${stateDir} ${BUILD_DIR}/convex-state`;
@@ -308,10 +429,10 @@ async function buildCustom(baseId = "lakitu-base") {
   console.log("Build context ready:");
   await $`ls -la ${BUILD_DIR}`;
 
-  // Step 3: Build E2B template with pre-built state
+  // Step 3: Build E2B template with pre-built state + custom config
   console.log(`\nBuilding Lakitu custom template on ${baseId}...`);
 
-  const result = await Template.build(customTemplate(baseId, BUILD_DIR), {
+  const result = await Template.build(customTemplate(baseId, BUILD_DIR, templateConfig), {
     alias: "lakitu",
     apiKey,
     onBuildLogs: defaultBuildLogger(),

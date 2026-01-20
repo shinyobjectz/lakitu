@@ -24,13 +24,14 @@ import {
   type KSAInfo,
 } from "../ksaPolicy";
 import { KSA_KNOWLEDGE, buildKsaAboutSummary } from "../../../shared/ksaKnowledge";
+import { MODEL_PRESETS, resolveModel } from "../models";
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-/** Model to use for intent schema generation - fast and cheap */
-const INTENT_SCHEMA_MODEL = "groq/llama-3.3-70b-versatile";
+/** Model to use for intent schema generation - uses "fast" preset */
+const INTENT_SCHEMA_MODEL = resolveModel("fast");
 
 /** Fallback model if primary fails */
 const FALLBACK_MODEL = "google/gemini-2.0-flash-001";

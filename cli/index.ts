@@ -5,16 +5,17 @@
  * Self-hosted AI agent framework for Convex + E2B.
  *
  * Commands:
- *   init     - Initialize lakitu in a Convex project
- *   build    - Build E2B sandbox template
- *   publish  - Publish template to E2B
- *   dev      - Start local development
+ *   init       - Initialize lakitu in a Convex project
+ *   build      - Build E2B sandbox template
+ *   publish    - Publish template to E2B
+ *   cloudflare - Manage Cloudflare workers and R2
  */
 
 import { Command } from "commander";
 import { init } from "./commands/init.js";
 import { build } from "./commands/build.js";
 import { publish } from "./commands/publish.js";
+import { cloudflare } from "./commands/cloudflare.js";
 
 const program = new Command();
 
@@ -43,5 +44,11 @@ program
   .description("Publish template to E2B")
   .option("--alias <name>", "Template alias", "lakitu")
   .action(publish);
+
+program
+  .command("cloudflare <command>")
+  .description("Manage Cloudflare workers and R2")
+  .option("-p, --project <path>", "Project directory")
+  .action(cloudflare);
 
 program.parse();

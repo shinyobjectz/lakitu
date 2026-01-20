@@ -1,11 +1,130 @@
 /**
  * Beads - Task Tracking
  *
- * CRUD operations for task tracking with CRDT support
+ * CRUD operations for task tracking with CRDT support.
+ * Supports procedural plan initialization from thread config.
  */
 
 import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
+
+// ============================================
+// Types
+// ============================================
+
+const beadTypeValidator = v.union(
+  v.literal("task"),
+  v.literal("bug"),
+  v.literal("feature"),
+  v.literal("chore"),
+  v.literal("epic")
+);
+
+const beadStatusValidator = v.union(
+  v.literal("open"),
+  v.literal("in_progress"),
+  v.literal("blocked"),
+  v.literal("closed")
+);
+
+/**
+ * Plan item for bulk initialization.
+ */
+export interface PlanItem {
+  title: string;
+  type?: "task" | "bug" | "feature" | "chore" | "epic";
+  priority?: number;
+  description?: string;
+  labels?: string[];
+}
+
+// ============================================
+// Plan Initialization
+// ============================================
+
+/**
+ * Initialize beads from a plan.
+ * Used when starting a thread with a pre-defined plan.
+ */
+export const initFromPlan = mutation({
+  args: {
+    threadId: v.string(),
+    plan: v.array(v.object({
+      title: v.string(),
+      type: v.optional(beadTypeValidator),
+      priority: v.optional(v.number()),
+      description: v.optional(v.string()),
+      labels: v.optional(v.array(v.string())),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const createdIds: string[] = [];
+    const now = Date.now();
+
+    for (let i = 0; i < args.plan.length; i++) {
+      const item = args.plan[i];
+      const id = await ctx.db.insert("beads", {
+        title: item.title,
+        type: item.type || "task",
+        status: i === 0 ? "in_progress" : "open", // First item is in_progress
+        priority: item.priority ?? (i + 1), // Default priority based on order
+        description: item.description,
+        labels: item.labels,
+        threadId: args.threadId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      createdIds.push(id);
+    }
+
+    return { created: createdIds.length, ids: createdIds };
+  },
+});
+
+/**
+ * Get the current plan for a thread.
+ * Returns all non-closed beads in priority order.
+ */
+export const getPlan = query({
+  args: { threadId: v.string() },
+  handler: async (ctx, args) => {
+    const beads = await ctx.db
+      .query("beads")
+      .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
+      .collect();
+
+    // Filter out closed and sort by status (in_progress first) then priority
+    return beads
+      .filter((b) => b.status !== "closed")
+      .sort((a, b) => {
+        // In progress first
+        if (a.status === "in_progress" && b.status !== "in_progress") return -1;
+        if (b.status === "in_progress" && a.status !== "in_progress") return 1;
+        // Then by priority
+        return a.priority - b.priority;
+      });
+  },
+});
+
+/**
+ * Clear all beads for a thread.
+ * Used for resetting or re-initializing plans.
+ */
+export const clearThread = mutation({
+  args: { threadId: v.string() },
+  handler: async (ctx, args) => {
+    const beads = await ctx.db
+      .query("beads")
+      .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
+      .collect();
+
+    for (const bead of beads) {
+      await ctx.db.delete(bead._id);
+    }
+
+    return { deleted: beads.length };
+  },
+});
 
 // ============================================
 // Mutations

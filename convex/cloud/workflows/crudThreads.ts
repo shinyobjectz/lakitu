@@ -24,6 +24,23 @@ async function checkThreadAccess(ctx: QueryCtx | MutationCtx, threadId: Id<"thre
 // Threads (Chat Interface)
 // ============================================
 
+/**
+ * Plan item for procedural beads initialization.
+ */
+const planItemValidator = v.object({
+  title: v.string(),
+  type: v.optional(v.union(
+    v.literal("task"),
+    v.literal("bug"),
+    v.literal("feature"),
+    v.literal("chore"),
+    v.literal("epic")
+  )),
+  priority: v.optional(v.number()),
+  description: v.optional(v.string()),
+  labels: v.optional(v.array(v.string())),
+});
+
 /** Create a new chat thread */
 export const createThread = mutation({
   args: {
@@ -32,9 +49,11 @@ export const createThread = mutation({
     workspaceId: v.optional(v.string()),
     title: v.optional(v.string()),
     orgId: v.optional(v.string()),
+    /** Initial plan items to seed beads in the sandbox */
+    initialPlan: v.optional(v.array(planItemValidator)),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("threads", {
+    const threadId = await ctx.db.insert("threads", {
       userId: args.userId,
       orgId: args.orgId,
       boardId: args.boardId,
@@ -43,6 +62,24 @@ export const createThread = mutation({
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
+
+    // Store initial plan in thread metadata if provided
+    // The sandbox will read this and initialize beads
+    if (args.initialPlan && args.initialPlan.length > 0) {
+      // Add system message with plan
+      await ctx.db.insert("threadMessages", {
+        threadId,
+        role: "assistant",
+        content: `Plan initialized with ${args.initialPlan.length} tasks.`,
+        createdAt: Date.now(),
+        metadata: {
+          type: "text",
+          data: { initialPlan: args.initialPlan },
+        },
+      });
+    }
+
+    return threadId;
   },
 });
 

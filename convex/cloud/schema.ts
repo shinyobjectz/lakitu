@@ -297,6 +297,40 @@ export default defineSchema({
   }).index("by_session", ["sessionId"]),
 
   // ============================================
+  // Model Configuration
+  // Centralized LLM model settings
+  // ============================================
+
+  modelConfig: defineTable({
+    defaultPreset: v.string(), // "fast", "balanced", "capable", "vision"
+    presets: v.optional(v.any()), // Custom preset overrides
+    useCaseOverrides: v.optional(v.any()), // Per-use-case model overrides
+  }),
+
+  // ============================================
+  // Sandbox Cache
+  // E2B sandbox state caching for fast startup
+  // ============================================
+
+  sandboxCache: defineTable({
+    templateId: v.string(),
+    checkpointId: v.string(),
+    configHash: v.optional(v.string()),
+    config: v.optional(v.any()),
+    state: v.union(
+      v.literal("creating"),
+      v.literal("ready"),
+      v.literal("expired")
+    ),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+  })
+    .index("by_template", ["templateId"])
+    .index("by_checkpoint", ["checkpointId"])
+    .index("by_expires", ["expiresAt"]),
+
+  // ============================================
   // Warm Sandbox Pool
   // Pre-warmed E2B sandboxes for fast startup
   // ============================================

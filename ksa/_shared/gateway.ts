@@ -8,6 +8,8 @@
  * - callGateway: Standard blocking call (await response)
  * - callGatewayBatch: Multiple calls in single HTTP request (parallel execution)
  * - fireAndForget: Non-blocking call (don't wait for response)
+ *
+ * @deprecated Import from '@lakitu/sdk' or '@lakitu/sdk/gateway' instead of '@lakitu/sdk/ksa/gateway'
  */
 
 import { readFileSync, existsSync } from "fs";
@@ -85,13 +87,13 @@ export async function callGateway<T = unknown>(
   return result.data as T;
 }
 
-interface BatchCall {
+export interface BatchCall {
   path: string;
   args?: Record<string, unknown>;
   type?: "query" | "mutation" | "action";
 }
 
-interface BatchResult<T = unknown> {
+export interface BatchResult<T = unknown> {
   ok: boolean;
   data?: T;
   error?: string;

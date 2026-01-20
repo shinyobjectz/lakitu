@@ -21,6 +21,41 @@
       "types": "./dist/sdk/builders.d.ts",
       "import": "./dist/sdk/builders.js"
     },
+    "./gateway": {
+      "bun": "./sdk/gateway.ts",
+      "types": "./dist/sdk/gateway.d.ts",
+      "import": "./dist/sdk/gateway.js"
+    },
+    "./db": {
+      "bun": "./sdk/db.ts",
+      "types": "./dist/sdk/db.d.ts",
+      "import": "./dist/sdk/db.js"
+    },
+    "./primitives": {
+      "bun": "./sdk/primitives.ts",
+      "types": "./dist/sdk/primitives.d.ts",
+      "import": "./dist/sdk/primitives.js"
+    },
+    "./template": {
+      "bun": "./sdk/template.ts",
+      "types": "./dist/sdk/template.d.ts",
+      "import": "./dist/sdk/template.js"
+    },
+    "./loro": {
+      "bun": "./loro/index.ts",
+      "default": "./loro/index.ts"
+    },
+    "./cloudflare": {
+      "bun": "./cloudflare/index.ts",
+      "default": "./cloudflare/index.ts"
+    },
+    "./convex.config": {
+      "default": "./convex/cloud/convex.config.ts"
+    },
+    "./convex/cloud/gateway": {
+      "bun": "./convex/cloud/gateway/index.ts",
+      "default": "./convex/cloud/gateway/index.ts"
+    },
     "./ksa/gateway": {
       "bun": "./ksa/_shared/gateway.ts",
       "default": "./ksa/_shared/gateway.ts"
@@ -36,13 +71,6 @@
     "./ksa/browser": {
       "bun": "./ksa/browser.ts",
       "default": "./ksa/browser.ts"
-    },
-    "./loro": {
-      "bun": "./loro/index.ts",
-      "default": "./loro/index.ts"
-    },
-    "./convex.config": {
-      "default": "./convex/cloud/convex.config.ts"
     }
   },
   "files": [
@@ -52,9 +80,12 @@
     "shared",
     "ksa",
     "loro",
+    "cloudflare",
     "runtime",
     "template",
-    "README.md"
+    "docs",
+    "README.md",
+    "CONTRIBUTING.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -93,6 +124,7 @@
     "commander": "^12.1.0",
     "convex": "^1.17.0",
     "e2b": "^2.10.1",
+    "jose": "^5.2.0",
     "loro-crdt": "^1.10.4",
     "zod": "^3.23.0"
   },
