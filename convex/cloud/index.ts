@@ -1,14 +1,16 @@
 /**
- * Agent Feature Module
+ * Lakitu Cloud Component
  * 
  * Exports all agent-related functionality:
+ * - Component config (for app.use())
  * - CRUD operations
  * - Sandbox lifecycle management
- * - Agent workflows (orchestrate the agent in different ways)
+ * - Agent workflows
  * - Sandbox compilation
- * 
- * Note: HTTP callbacks are handled by gateway.ts (unified /agent/callback endpoint)
  */
+
+// Component config for convex.config.ts: app.use(lakitu)
+export { default } from "./convex.config";
 
 // CRUD Operations
 export * as lorobeads from "./workflows/crudLorobeads";

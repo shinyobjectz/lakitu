@@ -8,8 +8,8 @@
  */
 
 import { v } from "convex/values";
-import { action, query, mutation, internalMutation, internalQuery } from "../_generated/server";
-import { internal } from "../_generated/api";
+import { action, query, mutation, internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 /** Send a message to a recipient */
 export const send = action({
