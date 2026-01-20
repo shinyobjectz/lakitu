@@ -190,11 +190,12 @@ const baseTemplate = Template()
     mkdir -p /home/user/workspace /home/user/.convex/convex-backend-state/lakitu /home/user/artifacts && \
     chown -R user:user /home/user
   `)
-  // Install crawl4ai for web scraping with Playwright browsers for JS rendering
+  // Install crawl4ai + camoufox for stealth web scraping
   .runCmd(`
-    pip3 install crawl4ai playwright && \
-    /home/user/.local/bin/playwright install chromium --with-deps && \
-    /home/user/.local/bin/crawl4ai-setup || true
+    pip3 install crawl4ai playwright camoufox && \
+    /home/user/.local/bin/playwright install chromium firefox --with-deps && \
+    /home/user/.local/bin/crawl4ai-setup || true && \
+    python3 -c "from camoufox.sync_api import Camoufox; print('camoufox ready')" || true
   `)
   .setEnvs({
     HOME: "/home/user",
