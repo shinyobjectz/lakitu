@@ -210,7 +210,9 @@ ENV CONVEX_LOCAL_STORAGE="/home/user/.convex/convex-backend-state/lakitu"
 USER user
 
 # Install patchright in lakitu project for dynamic imports from KSA context
-RUN cd /home/user/lakitu && /home/user/.bun/bin/bun add patchright
+# Then install browser binaries as user (they go to ~/.cache/ms-playwright/)
+RUN cd /home/user/lakitu && /home/user/.bun/bin/bun add patchright && \
+    npx patchright install chromium
 
 WORKDIR /home/user/workspace
 `;
