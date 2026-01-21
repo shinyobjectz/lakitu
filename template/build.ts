@@ -76,7 +76,7 @@ function generatePipInstall(packages: string[]): string {
  */
 function generateNpmInstall(packages: string[]): string {
   if (packages.length === 0) return "";
-  return `npm install -g ${packages.join(" ")}`;
+  return `sudo npm install -g ${packages.join(" ")}`;
 }
 
 async function getApiKey(): Promise<string> {

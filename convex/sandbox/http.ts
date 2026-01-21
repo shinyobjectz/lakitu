@@ -11,23 +11,22 @@ import { httpAction } from "./_generated/server";
 const http = httpRouter();
 
 /**
- * Metrics endpoint - returns sandbox health and resource usage.
+ * Sandbox metrics endpoint - returns sandbox health and resource usage.
  * Used by pool health checks and Claude Code observability.
  *
- * GET /metrics
+ * Note: /metrics is reserved by Convex backend for Prometheus metrics.
+ * Use /sandbox-metrics to avoid collision.
+ *
+ * GET /sandbox-metrics
  *
  * Response:
  * {
  *   status: string,
  *   timestamp: number
  * }
- *
- * Note: Full system metrics (CPU, memory) would require Node.js APIs
- * which aren't available in the Convex V8 runtime. For detailed metrics,
- * use the sandbox's HTTP server or E2B's metrics API instead.
  */
 http.route({
-  path: "/metrics",
+  path: "/sandbox-metrics",
   method: "GET",
   handler: httpAction(async () => {
     // Convex V8 runtime doesn't have access to Node.js APIs like 'os'
@@ -54,10 +53,10 @@ http.route({
  * Health check endpoint - simple ping for pool management.
  * Used by E2B pool to verify sandbox is responsive.
  *
- * GET /health
+ * GET /sandbox-health
  */
 http.route({
-  path: "/health",
+  path: "/sandbox-health",
   method: "GET",
   handler: httpAction(async () => {
     return new Response(JSON.stringify({ status: "ok", timestamp: Date.now() }), {
@@ -71,13 +70,13 @@ http.route({
  * Version endpoint - returns SDK version for debugging.
  * Used by pool health checks.
  *
- * GET /version
+ * GET /sandbox-version
  *
  * Note: Version is hardcoded since Convex V8 runtime doesn't have
  * access to Node.js fs APIs. Update this when publishing new versions.
  */
 http.route({
-  path: "/version",
+  path: "/sandbox-version",
   method: "GET",
   handler: httpAction(async () => {
     // Convex V8 runtime can't read files directly
