@@ -132,15 +132,43 @@ async function buildCustom(apiKey: string, baseId: string) {
     stdio: "pipe",
   });
 
-  // Copy user's project KSAs
+  // Copy user's project KSAs (recursively to support subdirectories)
   const userKsaDir = join(process.cwd(), "lakitu");
   if (existsSync(userKsaDir)) {
     console.log("   Copying project KSAs from lakitu/...");
-    const ksaFiles = readdirSync(userKsaDir).filter((f: string) => f.endsWith(".ts"));
-    for (const file of ksaFiles) {
-      cpSync(join(userKsaDir, file), join(buildDir, "lakitu/ksa", file));
-    }
-    console.log(`   ✓ Copied ${ksaFiles.length} project KSAs`);
+
+    // Count all .ts files recursively
+    const countTsFiles = (dir: string): number => {
+      let count = 0;
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = join(dir, entry.name);
+        if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+          count += countTsFiles(fullPath);
+        } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+          count++;
+        }
+      }
+      return count;
+    };
+
+    // Copy directory structure recursively
+    const copyTsFilesRecursive = (srcDir: string, destDir: string) => {
+      mkdirSync(destDir, { recursive: true });
+      for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
+        const srcPath = join(srcDir, entry.name);
+        const destPath = join(destDir, entry.name);
+
+        if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+          copyTsFilesRecursive(srcPath, destPath);
+        } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+          cpSync(srcPath, destPath);
+        }
+      }
+    };
+
+    const ksaCount = countTsFiles(userKsaDir);
+    copyTsFilesRecursive(userKsaDir, join(buildDir, "lakitu/ksa"));
+    console.log(`   ✓ Copied ${ksaCount} project KSAs (including subdirectories)`);
   }
 
   // Copy start script
